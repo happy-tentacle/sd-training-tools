@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory = $true)] [string] $Path,
-    [Parameter(Mandatory = $false)] [string] $TrainingBasePath = "~/dev/training",
+    [Parameter(Mandatory = $false)] [string] $TrainingBasePath = "$(bash -c 'readlink -f ~')/training",
     [Parameter(Mandatory = $false)] [string] $ModelPath = "$TrainingBasePath/ponyDiffusionV6XL_v6StartWithThisOne.safetensors",
     [Parameter(Mandatory = $false)] [string] $LoraFilePrefix = "happy_tentacle-",
     [Parameter(Mandatory = $false)] [string] $Trigger = "",
@@ -166,10 +166,10 @@ safeguard_warmup = ""True""
 "
 
 $TestPrompt = 
-"$Trigger, 1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame
+"1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame
+$Trigger, 1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame
 $Trigger, school uniform, 1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame
-$Trigger, kimono, 1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame
-$Trigger, bikini, 1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame"
+$Trigger, kimono, 1girl, solo, smile, cowboy shot, looking at viewer, outdoors, score_9, score_8_up, score_7_up, score_6_up, score_5_up, score_4_up --n simple background, out of frame"
 
 if ($Overwrite -or !(Test-Path -LiteralPath "$Path\settings.toml")) {
     Set-Content -NoNewline -LiteralPath "$Path\settings.toml" -Value $Settings

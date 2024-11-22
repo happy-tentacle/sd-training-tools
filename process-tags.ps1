@@ -79,7 +79,10 @@ $Config.tagCategories | get-member -type properties | % {
     $ConfigTagCategories.Add($_.Name, $Dict)
 }
 
-$RedundantTags = $Config.redundantTags
+$RedundantTags = [System.Collections.Generic.Dictionary[String, String]]::new([StringComparer]::InvariantCultureIgnoreCase)
+$Config.redundantTags | get-member -type properties | % { 
+    $RedundantTags.Add($_.Name, ($Config.redundantTags | Select-Object -ExpandProperty $_.Name))
+}
 
 $TagsToKeep = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
 $TagsToKeep.UnionWith([string[]]@($Config.tagsToKeep))
@@ -107,7 +110,7 @@ $KnownBooruTags.UnionWith([string[]]@($BooruTags | % { $_.name }))
 
 # Parse options
 
-$PathDirectory = Get-Item -LiteralPath $Path
+$PathDirectory = Get-Item -LiteralPath $Path.TrimEnd("\")
 $FileList = Get-ChildItem -File -Recurse:$Recurse -LiteralPath $Path -Filter "*.txt" | Where-Object { $_.FullName -notmatch "\\\..*" }
 $FileDirs = $FileList | % { $_.Directory } | Get-Unique
 $FileDirImages = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
@@ -131,12 +134,19 @@ $CategoryScores = [System.Collections.ArrayList]@()
     
 function Get-Files-By-Category {
     param (
-        [Parameter(Mandatory = $true)] [string] $CategoryName
+        [Parameter(Mandatory = $true)] [string] $CategoryName,
+        [Parameter(Mandatory = $false)] [switch] $IncludePrefixes
     )
 
     $CategoryTags = $ConfigTagCategories[$CategoryName].Keys
     if (!$CategoryTags) {
         $CategoryTags = $CategoryName.Split(",") | % { $_.Trim().ToLowerInvariant() }
+    }
+
+    if ($CategoryName -eq "clothing" -and $IncludePrefixes) {
+        $TagsWithColor = $CategoryTags | % { $Tag = $_; $Config.clothingColors | % { "$_ $Tag" } }
+        $TagsWithStyle = $CategoryTags | % { $Tag = $_; $Config.clothingStyles | % { "$_ $Tag" } }
+        $CategoryTags = $TagsWithStyle + $TagsWithColor + $CategoryTags
     }
 
     $Categorized = @($CategoryTags | % { $CategoryTag = $_; @{ Category = $CategoryTag; TagFiles = @($TagFiles | Where-Object { 
@@ -225,7 +235,7 @@ function Move-By-Category {
         [Parameter(Mandatory = $true)] [string] $CategoryName
     )
 
-    $FilesByCategory = Get-Files-By-Category -CategoryName $CategoryName
+    $FilesByCategory = Get-Files-By-Category -CategoryName $CategoryName -IncludePrefixes
     $FilesMoved = [System.Collections.Generic.HashSet[String]]::new([StringComparer]::InvariantCultureIgnoreCase)
 
     foreach ($CategoryFiles in $FilesByCategory) {
@@ -313,7 +323,8 @@ foreach ($File in $FileList) {
 
     if ($TagFolderName -and !$File.Directory.Name.StartsWith("_") -and $File.Directory.FullName -ne $PathDirectory.FullName) {
         $DirSep = [System.IO.Path]::DirectorySeparatorChar
-        [System.IO.Path]::GetDirectoryName((Resolve-Path -LiteralPath ($File.FullName) -Relative -RelativeBasePath ($PathDirectory.FullName))).Trim("." + $DirSep).Split($DirSep) | Add-Tag
+        $DirName = [System.IO.Path]::GetDirectoryName((Resolve-Path -LiteralPath ($File.FullName) -Relative -RelativeBasePath ($PathDirectory.FullName)))
+        $DirName.Trim("." + $DirSep).Split($DirSep) | Select-String -Pattern "([^0-9]*[^0-9_]+)(?:_[0-9]+)?" | % { $_.Matches.Groups[1].Value } | Add-Tag
     }
 
     if ($ReplaceTags) {
@@ -332,8 +343,8 @@ foreach ($File in $FileList) {
     $RemoveTags | Remove-Tag
 
     if ($RemoveRedundantTags) {
-        $FileTags.ToArray() | Select-String -Pattern '^([^ ]+) ([^ ]+)$' | % { $_.Matches.Groups[2].Value } | Remove-Tag
-        $FileTags.ToArray() | Select-String -Pattern '^([^ ]+) ([^ ]+)$' | % { $_.Matches.Groups[2].Value } | % { $RedundantTags[$_] } | Remove-Tag
+        $FileTags.ToArray() | Select-String -Pattern '^([^ ]+) ([^ ]+)$' | % { $_.Matches.Groups[2].Value } | Where-Object { !$TagsToKeep.Contains($_) } | Remove-Tag
+        $FileTags.ToArray() | Select-String -Pattern '^([^ ]+) ([^ ]+)$' | % { $_.Matches.Groups[2].Value } | Where-Object { !$TagsToKeep.Contains($_) } | % { $RedundantTags[$_] } | Remove-Tag
         $FileTags.ToArray() | % { $RedundantTags[$_] } | Remove-Tag
     }
 
@@ -363,13 +374,13 @@ if ($SuffixFileCount) {
     foreach ($Group in $FilesByDirectory) {
         $DirFullName = $Group.Name
         $Dir = Get-Item -LiteralPath $DirFullName
-        if ($Dir.FullName -eq $PathDirectory.FullName) {
+        if ($Dir.FullName -eq $PathDirectory.FullName -or $Dir.Name.StartsWith("_")) {
             continue
         }
 
         $DirFiles = $Group.Group
         $ParentDirFullName = $Dir.Parent.FullName
-        $NewDirName = $Dir.Name | Select-String -Pattern "([^0-9_]+)" | % { $_.Matches.Groups[1].Value }
+        $NewDirName = $Dir.Name | Select-String -Pattern "([^0-9]*[^0-9_]+)(?:_[0-9]+)?" | % { $_.Matches.Groups[1].Value }
         if ($NewDirName) {
             $NewDirName = $NewDirName.Trim() + "_" + $DirFiles.Count
         }
