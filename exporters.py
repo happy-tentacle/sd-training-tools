@@ -1,13 +1,44 @@
+import logging
 import os
-from typing import Any, List, Mapping, Optional, Dict
+import sys
+from typing import Any, Mapping, Optional
 from waifuc.export import BaseExporter, LocalDirectoryExporter
 from waifuc.model import ImageItem
 from imgutils.tagging import tags_to_text
 
 
+class FileNameExporter(BaseExporter):
+    filenames: list[str] = []
+
+    def __init__(
+        self, filenames: list[str] = None, ignore_error_when_export: bool = False
+    ):
+        BaseExporter.__init__(self, ignore_error_when_export)
+        if filenames is not None:
+            self.filenames = filenames
+
+    def pre_export(self):
+        pass
+
+    def post_export(self):
+        pass
+
+    def export_item(self, item: ImageItem):
+        if "path" in item.meta:
+            self.filenames.append(item.meta["path"])
+            print(item.meta["path"], file=sys.stdout, flush=True)
+
+    def reset(self):
+        pass
+
+    def __deepcopy__(self, memo):
+        # source.export creates a deepcopy of the exporter so we need to override __deepcopy__ to reuse the same dicts
+        return FileNameExporter(self.filenames, self.ignore_error_when_export)
+
+
 class TagValidatorExporter(BaseExporter):
     def __init__(
-        self, tag_frequency: Dict[str, int], ignore_error_when_export: bool = False
+        self, tag_frequency: dict[str, int], ignore_error_when_export: bool = False
     ):
         BaseExporter.__init__(self, ignore_error_when_export)
         self.tag_frequency = tag_frequency
@@ -33,7 +64,7 @@ class TagValidatorExporter(BaseExporter):
 
 
 class ChainedExporter(BaseExporter):
-    def __init__(self, exporters: List[BaseExporter]):
+    def __init__(self, exporters: list[BaseExporter]):
         self.exporters = exporters
 
     def pre_export(self):
@@ -66,6 +97,7 @@ class TextualInversionExporter(LocalDirectoryExporter):
         skip_when_image_exist: bool = False,
         ignore_error_when_export: bool = False,
         save_params: Optional[Mapping[str, Any]] = None,
+        organize_by_tags: list[str] = None
     ):
         LocalDirectoryExporter.__init__(
             self, output_dir, clear, ignore_error_when_export
@@ -78,19 +110,28 @@ class TextualInversionExporter(LocalDirectoryExporter):
         self.skip_image_export = skip_image_export
         self.skip_when_image_exist = skip_when_image_exist
         self.save_params = save_params or {}
+        self.organize_by_tags = organize_by_tags or []
 
     def export_item(self, item: ImageItem):
         if "filename" in item.meta:
             filename = item.meta["filename"]
         else:
             self.untitles += 1
-            filename = f"untited_{self.untitles}.png"
+            filename = f"untitled_{self.untitles}.png"
 
         tags = item.meta.get("tags", None) or {}
 
-        full_filename = os.path.join(self.output_dir, filename)
+        output_dir = self.output_dir
+        if len(self.organize_by_tags) > 0:
+            tags: dict[str, float] = item.meta.get("tags", None)
+            for tag in self.organize_by_tags:
+                if tag in tags:
+                    output_dir = os.path.join(output_dir, tag)
+                    break
+
+        full_filename = os.path.join(output_dir, filename)
         full_tagname = os.path.join(
-            self.output_dir, os.path.splitext(filename)[0] + ".txt"
+            output_dir, os.path.splitext(filename)[0] + ".txt"
         )
         full_directory = os.path.dirname(full_filename)
         if full_directory:

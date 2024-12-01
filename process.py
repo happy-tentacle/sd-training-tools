@@ -117,6 +117,12 @@ parser.add_argument(
     help="Only run tagger, do not manipulate images",
     default=False,
 )
+parser.add_argument(
+    "--organize-by-tags",
+    dest="organize_by_tags",
+    help="Organize output images in folders based on the given tags",
+    nargs="+",
+)
 
 args = parser.parse_args()
 
@@ -135,6 +141,7 @@ tag_all_of: list[str] = args.tag_all_of
 tag_none_of: list[str] = args.tag_none_of
 tag_confidence: float = args.tag_confidence
 tag_only: bool = args.tag_only
+organize_by_tags: list[str] = args.organize_by_tags
 
 # See https://deepghs.github.io/waifuc/main/tutorials/crawl_videos/index.html
 # See https://deepghs.github.io/waifuc/main/tutorials/process_images/index.html#common-actions-and-usage-examples
@@ -237,6 +244,7 @@ if __name__ == "__main__":
                 skip_when_image_exist=True,
                 skip_image_export=tag_only,
                 use_spaces=True,
+                organize_by_tags=organize_by_tags
             )
         )
     elif output_meta == "json":
@@ -247,7 +255,7 @@ if __name__ == "__main__":
                 [
                     SaveExporter(output, skip_when_image_exist=True),
                     TextualInversionExporter(
-                        output, skip_when_image_exist=True, use_spaces=True
+                        output, skip_when_image_exist=True, use_spaces=True, organize_by_tags=organize_by_tags
                     ),
                 ]
             )

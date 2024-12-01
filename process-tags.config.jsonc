@@ -7,6 +7,7 @@
             "upper body",
             "lower body",
             "cowboy shot",
+            "breast focus",
             "eye focus",
             "hair focus"
         ],
@@ -59,6 +60,7 @@
             "one eye closed",
             "jitome",
             "no eyes",
+            "covered eyes",
             "head out of frame", // Face not visible
             "hair over eyes", // Eyes not visible
             "facing away" // Face not visible
@@ -113,6 +115,8 @@
             "torogao",
             "screaming",
             "smile",
+            "raised eyebrows",
+            "furrowed brow",
             "head out of frame", // Face not visible
             "facing away" // Face not visible
         ],
@@ -192,10 +196,17 @@
             "sarashi",
             "cape",
             "scarf",
-            // No top visible
-            "collar",
-            "shorts",
             "skirt",
+            "shorts",
+            "sideless outfit",
+            "detached collar",
+            "collar",
+            "detached sleeves",
+            "long sleeves",
+            "short sleeves",
+            "naked towel",
+            "panties",
+            "bra",
             "underwear only",
             "underwear",
             "completely nude",
@@ -238,6 +249,7 @@
         "lace-trimmed",
         "fur-trimmed",
         "ribbon-trimmed",
+        "polka dot",
         "backless",
         "layered",
         "pleated",
@@ -253,7 +265,44 @@
         "sweat",
         "sound effects",
         "speech bubble",
-        "belt"
+        "belt",
+        "glasses"
+    ],
+    // Warn if tag present in > X% of files
+    "tagsToWarn": {
+        "profile": 0.1,
+        "portrait": 0.3,
+        "eye focus": 0.05,
+        "head out of frame": 0.1,
+        "facing away": 0.1,
+        "closed eyes": 0.1,
+        "2girls": 0.1,
+        "2boys": 0.1,
+        "flat chest": 0.1,
+        "small breasts": 0.1,
+        "medium breasts": 0.1,
+        "large breasts": 0.1,
+        "huge breasts": 0.1,
+        "mosaic censoring": 0.3
+    },
+    "tagsWithoutColor": [
+        "shirt",
+        "skirt",
+        "dress",
+        "robe",
+        "coat",
+        "jacket",
+        "hoodie",
+        "apron",
+        "cape",
+        "scarf",
+        "shorts",
+        "choker",
+        "panties",
+        "bra",
+        "kimono",
+        "bikini",
+        "one-piece swimsuit"
     ],
     "unwantedTags": [
         // Taken from https://huggingface.co/datasets/alea31415/tag_filtering/blob/main/blacklist_tags.txt
@@ -343,14 +392,9 @@
         "style parody",
         "impossible clothes",
         "impossible shirt",
-        "clothing cutout" // Need type of cutout
-    ],
-    "breastSizes": [
-        "flat chest",
-        "small breasts",
-        "medium breasts",
-        "large breasts",
-        "huge breasts"
+        "clothing cutout", // Need type of cutout
+        "faceless",
+        "duel academy uniform \\(yu-gi-oh! gx\\)"
     ],
     "redundantTags": {
         "bikini": "swimsuit",
