@@ -49,7 +49,7 @@ if ($RunTagger) {
     }
 
     $TxtFiles = Get-ChildItem -File -LiteralPath $Path -Filter "*.txt"
-    $ImgFiles = Get-ChildItem -File -LiteralPath $Path -Recurse:$Recurse | Where-Object { $_.Name -match "\.(png|jpg|jpeg|bmp|gif)$" }
+    $ImgFiles = Get-ChildItem -File -LiteralPath $Path -Recurse:$Recurse | Where-Object { $_.Name -match "\.(png|jpg|jpeg|bmp|gif|webp)$" }
     foreach ($TxtFile in $TxtFiles) {
         $ImgFile = $ImgFiles | Where-Object { $_.BaseName -eq $TxtFile.BaseName }
         if ($ImgFile -and $ImgFile.Directory.FullName -ne $TxtFile.Directory.FullName) {
@@ -71,12 +71,12 @@ $TagScoreThreshold = 0.65
 
 $Config = Get-Content -Raw -LiteralPath "$($PSScriptRoot)\process-tags.config.jsonc" | ConvertFrom-Json
 
-$ConfigTagCategories = [System.Collections.Generic.Dictionary[String, System.Collections.Specialized.OrderedDictionary]]::new([StringComparer]::InvariantCultureIgnoreCase)
-$Config.tagCategories | get-member -type properties | % { 
+$TagsByCategory = [System.Collections.Generic.Dictionary[String, System.Collections.Specialized.OrderedDictionary]]::new([StringComparer]::InvariantCultureIgnoreCase)
+$Config.tagCategories | % { 
     # Category tags stored in a SortedSet by descending priority
     $Dict = [System.Collections.Specialized.OrderedDictionary]::new([StringComparer]::InvariantCultureIgnoreCase)
-    $Config.tagCategories | Select-Object -ExpandProperty $_.Name | % { $Dict.Add($_, $_) }
-    $ConfigTagCategories.Add($_.Name, $Dict)
+    $_.tags | % { $Dict.Add($_, $_) }
+    $TagsByCategory.Add($_.name, $Dict)
 }
 
 $RedundantTags = [System.Collections.Generic.Dictionary[String, String]]::new([StringComparer]::InvariantCultureIgnoreCase)
@@ -86,7 +86,7 @@ $Config.redundantTags | get-member -type properties | % {
 
 $TagsToKeep = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
 $TagsToKeep.UnionWith([string[]]@($Config.tagsToKeep))
-$TagsToKeep.UnionWith([string[]]@($ConfigTagCategories.Values | % { $_.Keys }))
+$TagsToKeep.UnionWith([string[]]@($TagsByCategory.Values | % { $_.Keys }))
 
 $TagsWithoutColor = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
 $TagsWithoutColor.UnionWith([string[]]@($Config.tagsWithoutColor))
@@ -110,8 +110,8 @@ else {
     $BooruTags | ConvertTo-Csv | Set-Content -LiteralPath $BooruTagsFilePath
 }
 
-$KnownBooruTags = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
-$KnownBooruTags.UnionWith([string[]]@($BooruTags | % { $_.name.Replace("(", "\(").Replace(")", "\)") }))
+$KnownBooruTags = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::InvariantCultureIgnoreCase)
+$BooruTags | % { $KnownBooruTags[$_.name.Replace("(", "\(").Replace(")", "\)")] = $_.post_count }
 
 # Parse options
 
@@ -119,7 +119,7 @@ $PathDirectory = Get-Item -LiteralPath $Path.TrimEnd("\")
 $FileList = Get-ChildItem -File -Recurse:$Recurse -LiteralPath $Path -Filter "*.txt" | Where-Object { $_.FullName -notmatch "\\\..*" }
 $FileDirs = $FileList | % { $_.Directory } | Get-Unique
 $FileDirImages = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
-$FileDirImages.UnionWith([string[]]@($FileDirs | % { Get-ChildItem -File -LiteralPath $_.FullName } | % { $_.FullName } | % { $_ | Select-String -Pattern "^(.+)\.(png|jpg|jpeg|bmp|gif)$" } | % { $_.Matches.Groups[1] }))
+$FileDirImages.UnionWith([string[]]@($FileDirs | % { Get-ChildItem -File -LiteralPath $_.FullName } | % { $_.FullName } | % { $_ | Select-String -Pattern "^(.+)\.(png|jpg|jpeg|bmp|gif|webp)$" } | % { $_.Matches.Groups[1] }))
 # Exclude txt files that have no corresponding image
 $FileList = $FileList | Where-Object { $FileDirImages.Contains(($_.FullName | Select-String -Pattern "^(.+)\.txt$" | % { $_.Matches.Groups[1] })) }
 
@@ -144,15 +144,21 @@ function Get-Files-By-Category {
         [Parameter(Mandatory = $false)] [switch] $ExactMatch
     )
 
-    $CategoryTags = $ConfigTagCategories[$CategoryName].Keys
+    $CategoryTags = $TagsByCategory[$CategoryName].Keys
     if (!$CategoryTags) {
-        $CategoryTags = $CategoryName.Split(",") | % { $_.Trim().ToLowerInvariant() }
+        $CategoryTags = @($CategoryName.Split(",") | % { $_.Trim().ToLowerInvariant() })
+
+        foreach ($Tag in $CategoryTags) {
+            if ($Tag.Contains("*") -or $Tag.Contains("?")) {
+                $CategoryTags += ($CountByTags.Keys | Where-Object { $_ -ilike $Tag })
+            }
+        }
     }
 
     if ($CategoryName -eq "clothing" -and $IncludePrefixes) {
         $TagsWithColor = $CategoryTags | % { $Tag = $_; $Config.clothingColors | % { "$_ $Tag" } }
         $TagsWithStyle = $CategoryTags | % { $Tag = $_; $Config.clothingStyles | % { "$_ $Tag" } }
-        $CategoryTags = $CategoryTags + $TagsWithStyle + $TagsWithColor 
+        $CategoryTags += $TagsWithStyle + $TagsWithColor 
     }
 
     $Categorized = @($CategoryTags | % { $CategoryTag = $_; @{ 
@@ -251,7 +257,7 @@ function Move-By-Category {
     foreach ($FileWithCategories in $FilesWithCategories) {
         $TagFile = $FileWithCategories.TagFile
         $Categories = $FileWithCategories.Categories
-        $JoinedCategories = ($Categories | % { $_.Category }) -Join ", "
+        $JoinedCategories = ($Categories | % { $_.Category.Replace("\)", ")").Replace("\(", "(") }) -Join ", "
         $Directory = $Categories.Count -eq 0 ? (Get-Item -LiteralPath $Path) : (New-Item -Force -ItemType Directory -Path "$Path\$JoinedCategories")
         $PrevFile = $TagFile.File
 
@@ -292,7 +298,7 @@ foreach ($File in $FileList) {
             [switch] $IgnoreStats
         )
         Process {
-            foreach ($Tag in @(($_ ?? "").Split(",") | % { $_.Trim().ToLowerInvariant() })) {
+            foreach ($Tag in @(($_ ?? "").Split(",") | % { $_.Trim().ToLowerInvariant().Replace(")", "\)").Replace("(", "\(").Replace("\\", "\") })) {
                 if ($Tag.StartsWith("-")) {
                     $Tag.Substring(1) | Remove-Tag
                 }
@@ -316,7 +322,7 @@ foreach ($File in $FileList) {
 
     function Remove-Tag {
         Process {
-            foreach ($Tag in @(($_ ?? "").Split(",") | % { $_.Trim().ToLowerInvariant() })) {
+            foreach ($Tag in @(($_ ?? "").Split(",") | % { $_.Trim().ToLowerInvariant().Replace(")", "\)").Replace("(", "\(").Replace("\\", "\") })) {
                 if ($Tag -and $FileTagsSet.Contains($Tag)) {
                     [void]$FileTags.Remove($Tag)
                     [void]$FileTagsSet.Remove($Tag)
@@ -333,7 +339,7 @@ foreach ($File in $FileList) {
     if ($TagFolderName -and !$File.Directory.Name.StartsWith("_") -and $File.Directory.FullName -ne $PathDirectory.FullName) {
         $DirSep = [System.IO.Path]::DirectorySeparatorChar
         $DirName = [System.IO.Path]::GetDirectoryName((Resolve-Path -LiteralPath ($File.FullName) -Relative -RelativeBasePath ($PathDirectory.FullName)))
-        $DirName.Trim("." + $DirSep).Split($DirSep) | Select-String -Pattern "([^0-9]*[^0-9_]+)(?:_[0-9]+)?" | % { $_.Matches.Groups[1].Value } | Add-Tag
+        $DirName.Trim("." + $DirSep).Split($DirSep) | Select-String -Pattern "(-?[0-9]?[^0-9_\- ,][^0-9_,]+)(?:_[0-9]+)?\b" -AllMatches -List | % { $_.Matches } | % { $_.Groups[1].Value } | Add-Tag
     }
 
     if ($ReplaceTags) {
@@ -364,11 +370,12 @@ foreach ($File in $FileList) {
     $FileTagsSet | % { $CountByTags[$_] = ($CountByTags[$_] ?? 0) + 1 }
 
     $TagFiles.Add(@{
-            File        = $File
-            Directory   = $File.Directory
-            Tags        = $FileTags
-            TagsAdded   = $TagsAdded
-            TagsRemoved = $TagsRemoved
+            File            = $File
+            OriginalContent = $FileContent
+            Directory       = $File.Directory
+            Tags            = $FileTags
+            TagsAdded       = $TagsAdded
+            TagsRemoved     = $TagsRemoved
         }) | Out-Null
 
 }
@@ -417,7 +424,9 @@ foreach ($TagFile in $TagFiles) {
 
     if (!$DryRun) {
         $FileTagsString = ($TagFile.Tags -join ", ")
-        Set-Content -NoNewLine -LiteralPath $TagFile.File.FullName -Value $FileTagsString
+        if ($TagFile.OriginalContent -ne $FileTagsString) {
+            Set-Content -NoNewLine -LiteralPath $TagFile.File.FullName -Value $FileTagsString
+        }
     }
 }
 
@@ -506,8 +515,8 @@ if ($LogStats) {
         Write-Host "" # New line
     }
 
-    foreach ($Key in $ConfigTagCategories.Keys) {
-        Write-Tag-Category-Stats -CategoryName $Key -Silent:($ConfigTagCategories.ContainsKey($OrganizeFilesBy) -and $Key -ne $OrganizeFilesBy)
+    foreach ($Key in $TagsByCategory.Keys) {
+        Write-Tag-Category-Stats -CategoryName $Key -Silent:($TagsByCategory.ContainsKey($OrganizeFilesBy) -and $Key -ne $OrganizeFilesBy)
     }
 
     Write-Host "--  Tag scores:  ".PadRight(80, "-")
@@ -548,7 +557,14 @@ if ($LogStats) {
     $TagsUnknown = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
     $TagsUnknown.UnionWith([string[]]@(`
                 $CountByTags.Keys | `
-                Where-Object { $Tag = $_; !$TagsAdded.Contains($Tag) -and !$FileTagsKept.Contains($Tag) -and !$KnownBooruTags.Contains($Tag) }
+                Where-Object { $Tag = $_; !$TagsAdded.Contains($Tag) -and !$FileTagsKept.Contains($Tag) -and !$KnownBooruTags.ContainsKey($Tag) }
+        ))
+
+    # Suggest removing tags with less than 1k booru images
+    $TagsBelow1k = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
+    $TagsBelow1k.UnionWith([string[]]@(`
+                $CountByTags.Keys | `
+                Where-Object { $Tag = $_; !$TagsAdded.Contains($Tag) -and !$FileTagsKept.Contains($Tag) -and $KnownBooruTags.ContainsKey($Tag) -and $KnownBooruTags[$Tag] -lt 1000 }
         ))
 
     # Suggest removing tags that are too broad (unless included in $FileTagsKept)
@@ -562,7 +578,7 @@ if ($LogStats) {
     $TagsInUnwantedList = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
     $TagsInUnwantedList.UnionWith([string[]]@($UnwantedTags | Where-Object { $AllTags.Contains($_) }))
 
-    if ($TagsInUnwantedList.Count -gt 0 -or $TagsUnknown.Count -gt 0 -or $TagsTooFrequent.Count -gt 0 -or $TagsAboveThreshold.Count -gt 0 -or $TagsTooBroad.Count -gt 0) {
+    if ($TagsInUnwantedList.Count -gt 0 -or $TagsUnknown.Count -gt 0 -or $TagsTooFrequent.Count -gt 0 -or $TagsAboveThreshold.Count -gt 0 -or $TagsTooBroad.Count -gt 0 -or $TagsBelow1k.Count -gt 0) {
         Write-Host "".PadRight(80, "-")
 
         if ($TagsInUnwantedList.Count -gt 0) {
@@ -573,6 +589,11 @@ if ($LogStats) {
         if ($TagsUnknown.Count -gt 0) {
             Write-Host "Suggested to untag (unknown or has < 500 booru count): " -NoNewline
             Write-Host ($TagsUnknown -Join ", ") -ForegroundColor Red
+        }
+
+        if ($TagsBelow1k.Count -gt 0) {
+            Write-Host "Suggested to untag (has < 1k booru count): " -NoNewline
+            Write-Host ($TagsBelow1k -Join ", ") -ForegroundColor Red
         }
 
         if ($TagsTooFrequent.Count -gt 0) {

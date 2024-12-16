@@ -69,7 +69,7 @@ $LoraMetadata = Get-ChildItem -File -Filter *.safetensors -Path C:\tools\stable-
             | % { $_.dataset }
         }
         catch {
-            Write-Error "Error parsing raw metadata`n$($RawMetadata | Select-String -Pattern '"ss_tag_frequency":"((?:\\"|[^"])+)"' | % { $_.Matches } | % { $_.Groups[1].Value -ireplace '\\\\', '\\' -ireplace '\\"', '"' })"
+            Write-Error "Error parsing raw metadata: $_`n$($RawMetadata | Select-String -Pattern '"ss_tag_frequency":"((?:\\"|[^"])+)"' | % { $_.Matches } | % { $_.Groups[1].Value -ireplace '\\\\', '\\' -ireplace '\\"', '"' })"
             throw $_
         }
     }

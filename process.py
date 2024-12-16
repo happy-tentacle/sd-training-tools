@@ -28,6 +28,11 @@ from exporters import ChainedExporter, TextualInversionExporter
 #   --add-tags ht_delilah delilah_warrior \
 #   --drop-tags "dark-skinned female" "dark skin" "animal ears" "furry female" "furry"
 
+# Troubleshooting:
+# 
+# For "Cannot import name 'guidedFilter' from 'cv2.ximgproc'", run "pip install opencv-contrib-python-headless"
+# (see https://github.com/chflame163/ComfyUI_LayerStyle/issues/141)
+
 parser = argparse.ArgumentParser(
     prog="Lora training script",
     description="Takes care of extracting, tagging, and deduplicating character images from video files",
@@ -117,6 +122,7 @@ parser.add_argument(
     help="Only run tagger, do not manipulate images",
     default=False,
 )
+# TODO: Make it work when --output-meta is set to None
 parser.add_argument(
     "--organize-by-tags",
     dest="organize_by_tags",
@@ -152,10 +158,10 @@ if __name__ == "__main__":
     if input_type == "video":
         if os.path.isdir(input):
             source = VideoSource.from_directory(
-                input, min_frame_interval=0.25, recursive=recursive
+                input, min_frame_interval=0.2, recursive=recursive
             )
         else:
-            source = VideoSource(input, min_frame_interval=0.25)
+            source = VideoSource(input, min_frame_interval=0.2)
     elif input_type == "image":
         if os.path.isdir(input):
             source = LocalSource(input)
@@ -172,7 +178,7 @@ if __name__ == "__main__":
             # Keep images with at least 320px of width and height
             MinSizeFilterAction(min_size),
             # Remove images similar to the last 5 captured
-            FilterSimilarAction(capacity=5),
+            FilterSimilarAction(capacity=5, threshold=0.3),
         )
 
     source = source.attach(

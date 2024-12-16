@@ -5,6 +5,7 @@ param (
     [Parameter(Mandatory = $false)] [Switch] $Overwrite,
     [Parameter(Mandatory = $false)] [Switch] $DryRun,
     [Parameter(Mandatory = $false)] [Switch] $IncludeNoCharacter,
+    [Parameter(Mandatory = $false)] [Switch] $SkipCharacterCheck,
     [Parameter(Mandatory = $false)] [Switch] $SkipIfMissingKeyword,
     [Parameter(Mandatory = $false)] [Switch] $FindCharacterByTrigger,
     [Parameter(Mandatory = $false)] [Switch] $Recurse,
@@ -33,9 +34,15 @@ if ($KeywordMapping) {
 
 }
 
-$CharacterLoras = & "$PSScriptRoot\get-character-loras.ps1"
-$CharactersByLora = $CharacterLoras.CharactersByLora
-$Characters = $CharacterLoras.Characters
+if ($SkipCharacterCheck) {
+    $CharactersByLora = @{}
+    $Characters = @()
+}
+else {
+    $CharacterLoras = & "$PSScriptRoot\get-character-loras.ps1"
+    $CharactersByLora = $CharacterLoras.CharactersByLora
+    $Characters = $CharacterLoras.Characters
+}   
 
 $UnknownLoras = @{}
 
