@@ -1,1 +1,1 @@
-xfce4-terminal -e='bash /home/ht/training/run-trainer.sh'
+xfce4-terminal --hold -e='bash -c "/home/ht/training/run-trainer.sh";bash'
