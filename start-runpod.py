@@ -11,32 +11,41 @@ import requests
 parser = argparse.ArgumentParser(
     prog="start-runpod",
     description="Starts a pod on runpod.io",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
 )
 
 parser.add_argument(
+    "-n",
     "--pod-name",
     dest="pod_name",
+    help="Name of the pod to get or create",
     default="ht-lora-easy-training-scripts",
 )
 parser.add_argument(
+    "-p",
     "--password",
     dest="password",
+    help="VNC password to use",
     default="password",
 )
 parser.add_argument(
+    "-i",
     "--image-name",
     dest="image_name",
+    help="Container image name to use",
     default="happytentacle/ht-runpod-lora-easy-training-scripts:preinstalled-0.3",
 )
 parser.add_argument(
+    "-g",
     "--gpu",
     dest="gpu",
+    help="GPU id to use",
     default="NVIDIA RTX 6000 Ada Generation",
 )
 parser.add_argument(
     "--runpodctl-receive",
+    help="Code to automatically pass to runpodctl receive on pod startup",
     dest="runpodctl_receive",
-    default="",
 )
 parser.add_argument(
     "--runpodctl-unzip",
@@ -46,11 +55,13 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-u",
     "--checkpoint-url",
+    help="Url of checkpoint to download on pod startup",
     dest="checkpoint_url",
-    default="",
 )
 parser.add_argument(
+    "-x",
     "--terminate-existing",
     dest="terminate_existing",
     action="store_true",
@@ -58,6 +69,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-r",
     "--restart-existing",
     dest="restart_existing",
     action="store_true",
@@ -65,6 +77,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-z",
     "--keep-existing",
     dest="keep_existing",
     action="store_true",
@@ -72,18 +85,20 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-k",
     "--ssh-key",
     dest="ssh_key",
     help="Path to public SSH key",
     default="~/.ssh/id_ed25519",
 )
 parser.add_argument(
+    "-f",
     "--rsync-from",
     dest="rsync_from",
     help="Run rsync to copy local files to pod",
-    default="",
 )
 parser.add_argument(
+    "-w",
     "--use-wsl",
     dest="use_wsl",
     action="store_true",
@@ -91,12 +106,13 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-t",
     "--rsync-to",
     dest="rsync_to",
     help="Run rsync to copy pod files to specified local folder",
-    default="",
 )
 parser.add_argument(
+    "-m",
     "--monitor-training",
     dest="monitor_training",
     action="store_true",
@@ -104,6 +120,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-c",
     "--continuous-rsync",
     dest="continuous_rsync",
     action="store_true",
@@ -111,6 +128,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-e",
     "--terminate-on-error",
     dest="terminate_on_error",
     action="store_true",
@@ -118,6 +136,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-q",
     "--terminate-after-training",
     dest="terminate_after_training",
     action="store_true",
@@ -125,6 +144,7 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-y",
     "--immediate",
     dest="immediate",
     action="store_true",
@@ -132,18 +152,21 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "-d",
     "--wait-for-sec",
     dest="wait_for_sec",
     help="Wait for X additional seconds before running post-training commands",
     default="0",
 )
 parser.add_argument(
+    "-s",
     "--iter-sec",
     dest="iter_sec",
     help="Wait for X seconds before each training status check iteration",
     default="10",
 )
 parser.add_argument(
+    "-a",
     "--wait-for-training-start",
     dest="wait_for_training_start",
     action="store_true",
@@ -184,7 +207,7 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 command_prefix = "wsl " if use_wsl else ""
 
 
-def transfer_files_to_pod(ssh_public_port, ip):
+def transfer_files_to_pod(ssh_public_port: int, ip: str):
     print("Transfering files local folder to pod")
 
     if not ssh_key:
@@ -197,22 +220,12 @@ def transfer_files_to_pod(ssh_public_port, ip):
     )
 
 
-def transfer_files_from_pod(pod):
+def transfer_files_from_pod(ssh_public_port: int, ip: str):
     print("Transfering files from pod to local folder")
 
     if not ssh_key:
         print("SSH key not specified via --ssh-key, cannot transfer files")
         return
-
-    ssh_port = [port for port in pod["runtime"]["ports"] if port["privatePort"] == 22]
-    if not ssh_port:
-        print("SSH port not open, cannot transfer files")
-        return
-
-    ssh_public_port = ssh_port[0]["publicPort"]
-    ip = ssh_port[0]["ip"]
-
-    command_prefix = "wsl " if use_wsl else ""
 
     # Include all subfolders of /home/ht/training
     # Except for LoRA_Easy_Training_Scripts
@@ -223,18 +236,18 @@ def transfer_files_from_pod(pod):
     )
 
 
-def terminate_pod(pod_id):
+def terminate_pod(pod_id: str):
     print(f"Terminating pod with id {pod_id}")
     runpod.terminate_pod(pod_id)
 
 
-def restart_pod(pod_id):
+def restart_pod(pod_id: str):
     print(f"Restarting pod with id {pod_id}")
     runpod.stop_pod(pod_id)
     runpod.resume_pod(pod_id)
 
 
-def wait_for_training(pod):
+def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
     pod_id = pod["id"]
     pod_training_url = f"https://{pod_id}-8000.proxy.runpod.net/"
 
@@ -277,7 +290,7 @@ def wait_for_training(pod):
                 print("Training stopped")
 
                 if rsync_to:
-                    transfer_files_from_pod(pod)
+                    transfer_files_from_pod(ssh_public_port, ip)
 
                 if terminate_after_training:
                     terminate_pod(pod_id)
@@ -292,7 +305,7 @@ def wait_for_training(pod):
                     )
 
                 if continuous_rsync:
-                    transfer_files_from_pod(pod)
+                    transfer_files_from_pod(ssh_public_port, ip)
 
             if wait_for_training_start and not training_started:
                 print("Waiting for training to start")
@@ -320,6 +333,8 @@ def get_or_create_pod():
 
     if keep_existing and existing_pods:
         pod = existing_pods[0]
+        pod_id = pod["id"]
+        print(f"Reusing pod with id {pod_id}")
     else:
         try:
             pod = runpod.create_pod(
@@ -340,6 +355,8 @@ def get_or_create_pod():
                     "HT_RUNPODCTL_UNZIP": "True" if runpodctl_unzip else "False",
                 },
             )
+            pod_id = pod["id"]
+            print(f"Created pod with id {pod_id}")
         except Exception as e:
             if str(e).index("No GPU found with the specified ID") >= 0:
                 print([gpu["id"] for gpu in runpod.get_gpus()])
@@ -349,11 +366,10 @@ def get_or_create_pod():
 
 if __name__ == "__main__":
     pod = get_or_create_pod()
-    pod_id = pod["id"]
+    pod_id: str = pod["id"]
     pod_vnc_url = f"https://kasm_user:{password}@{pod_id}-6901.proxy.runpod.net/"
     pod_training_url = f"https://{pod_id}-8000.proxy.runpod.net/"
 
-    print("Started pod 'ht-lora-easy-training-scripts")
     print("Pod list: https://www.runpod.io/console/pods")
     print(f"Pod id: {pod_id}")
     print("Username: kasm_user")
@@ -381,8 +397,8 @@ if __name__ == "__main__":
 
         time.sleep(5)
 
-    ip = ssh_ports[0]["ip"]
-    ssh_public_port = ssh_ports[0]["publicPort"]
+    ip: str = ssh_ports[0]["ip"]
+    ssh_public_port: int = ssh_ports[0]["publicPort"]
 
     print(f"Desktop url: {pod_vnc_url}")
     print(f"Public IP: {ip}")
@@ -396,4 +412,4 @@ if __name__ == "__main__":
         transfer_files_to_pod(ssh_public_port, ip)
 
     if monitor_training:
-        wait_for_training(pod)
+        wait_for_training(pod, ssh_public_port, ip)
