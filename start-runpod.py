@@ -19,6 +19,11 @@ parser.add_argument(
     default="ht-lora-easy-training-scripts",
 )
 parser.add_argument(
+    "--password",
+    dest="password",
+    default="password",
+)
+parser.add_argument(
     "--image-name",
     dest="image_name",
     default="happytentacle/ht-runpod-lora-easy-training-scripts:preinstalled-0.3",
@@ -46,15 +51,15 @@ parser.add_argument(
     default="",
 )
 parser.add_argument(
-    "--terminate",
-    dest="terminate",
+    "--terminate-existing",
+    dest="terminate_existing",
     action="store_true",
     help="Terminate existing pod of the same name if present",
     default=False,
 )
 parser.add_argument(
-    "--restart",
-    dest="restart",
+    "--restart-existing",
+    dest="restart_existing",
     action="store_true",
     help="Restart existing pod of the same name if present",
     default=False,
@@ -85,21 +90,92 @@ parser.add_argument(
     help="Use WSL to run rsync",
     default=False,
 )
+parser.add_argument(
+    "--rsync-to",
+    dest="rsync_to",
+    help="Run rsync to copy pod files to specified local folder",
+    default="",
+)
+parser.add_argument(
+    "--monitor-training",
+    dest="monitor_training",
+    action="store_true",
+    help="Monitor training continuously",
+    default=False,
+)
+parser.add_argument(
+    "--continuous-rsync",
+    dest="continuous_rsync",
+    action="store_true",
+    help="Run rsync every iteration",
+    default=False,
+)
+parser.add_argument(
+    "--terminate-on-error",
+    dest="terminate_on_error",
+    action="store_true",
+    help="Terminate pod if training status cannot be retrieved",
+    default=False,
+)
+parser.add_argument(
+    "--terminate-after-training",
+    dest="terminate_after_training",
+    action="store_true",
+    help="Terminate pod when training has completed",
+    default=False,
+)
+parser.add_argument(
+    "--immediate",
+    dest="immediate",
+    action="store_true",
+    help="Run commands immediately instead of waiting for training to complete",
+    default=False,
+)
+parser.add_argument(
+    "--wait-for-sec",
+    dest="wait_for_sec",
+    help="Wait for X additional seconds before running post-training commands",
+    default="0",
+)
+parser.add_argument(
+    "--iter-sec",
+    dest="iter_sec",
+    help="Wait for X seconds before each training status check iteration",
+    default="10",
+)
+parser.add_argument(
+    "--wait-for-training-start",
+    dest="wait_for_training_start",
+    action="store_true",
+    help="Wait for training to start before terminating pod",
+    default=False,
+)
 
 args = parser.parse_args()
 
 pod_name: str = args.pod_name
+password: str = args.password
 image_name: str = args.image_name
 runpodctl_receive: str = args.runpodctl_receive
 runpodctl_unzip: bool = args.runpodctl_unzip
 checkpoint_url: str = args.checkpoint_url
-terminate: bool = args.terminate
-restart: bool = args.restart
+terminate_existing: bool = args.terminate_existing
+restart_existing: bool = args.restart_existing
 keep_existing: bool = args.keep_existing
+terminate_after_training: bool = args.terminate_after_training
 gpu: str = args.gpu
 ssh_key: str = args.ssh_key
 use_wsl: bool = args.use_wsl
 rsync_from: str = args.rsync_from
+monitor_training: bool = args.monitor_training
+rsync_to: str = args.rsync_to
+terminate_after_training: bool = args.terminate_after_training
+immediate: bool = args.immediate
+terminate_on_error: bool = args.terminate_on_error
+continuous_rsync: bool = args.continuous_rsync
+wait_for_training_start: bool = args.wait_for_training_start
+wait_for_sec: int = int(args.wait_for_sec)
+iter_sec: int = int(args.iter_sec)
 
 load_dotenv()
 
@@ -108,7 +184,7 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 command_prefix = "wsl " if use_wsl else ""
 
 
-def transfer_files_from_pod(ssh_public_port, ip):
+def transfer_files_to_pod(ssh_public_port, ip):
     print("Transfering files local folder to pod")
 
     if not ssh_key:
@@ -121,21 +197,126 @@ def transfer_files_from_pod(ssh_public_port, ip):
     )
 
 
-if __name__ == "__main__":
+def transfer_files_from_pod(pod):
+    print("Transfering files from pod to local folder")
+
+    if not ssh_key:
+        print("SSH key not specified via --ssh-key, cannot transfer files")
+        return
+
+    ssh_port = [port for port in pod["runtime"]["ports"] if port["privatePort"] == 22]
+    if not ssh_port:
+        print("SSH port not open, cannot transfer files")
+        return
+
+    ssh_public_port = ssh_port[0]["publicPort"]
+    ip = ssh_port[0]["ip"]
+
+    command_prefix = "wsl " if use_wsl else ""
+
+    # Include all subfolders of /home/ht/training
+    # Except for LoRA_Easy_Training_Scripts
+    os.system(
+        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port} -i {ssh_key} -o \"StrictHostKeyChecking=no\"' "
+        "--exclude='LoRA_Easy_Training_Scripts' --include='/*/' --include='/*/**' --exclude='*' "
+        f"kasm-user@{ip}:/home/ht/training/ {rsync_to}"
+    )
+
+
+def terminate_pod(pod_id):
+    print(f"Terminating pod with id {pod_id}")
+    runpod.terminate_pod(pod_id)
+
+
+def restart_pod(pod_id):
+    print(f"Restarting pod with id {pod_id}")
+    runpod.stop_pod(pod_id)
+    runpod.resume_pod(pod_id)
+
+
+def wait_for_training(pod):
+    pod_id = pod["id"]
+    pod_training_url = f"https://{pod_id}-8000.proxy.runpod.net/"
+
+    prev_is_training: bool | None = None
+    training_started: bool = False
+
+    while True:
+        responded = False
+        try:
+            res = requests.get(f"{pod_training_url}/is_training")
+            if res.status_code == 200:
+                res_json = res.json()
+                is_training: bool = res_json["training"]
+                responded = True
+
+                if is_training:
+                    training_started = True
+            else:
+                print(
+                    f"Error retrieving training status, got status code {res.status_code}"
+                )
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error retrieving training status: {e}")
+
+        if responded or immediate:
+            # Make sure traning status is false for two consecutive calls
+            # to avoid terminating pod too early
+            if (
+                immediate
+                or prev_is_training is not None
+                and not is_training
+                and not prev_is_training
+                and (not wait_for_training_start or training_started)
+            ):
+                if wait_for_sec:
+                    print(f"Waiting for {wait_for_sec} seconds before running commands")
+                    time.sleep(wait_for_sec)
+
+                print("Training stopped")
+
+                if rsync_to:
+                    transfer_files_from_pod(pod)
+
+                if terminate_after_training:
+                    terminate_pod(pod_id)
+                break
+            else:
+                prev_is_training = is_training
+                if is_training:
+                    print("Training in progress")
+                elif not wait_for_training_start or training_started:
+                    print(
+                        "Training stopped, waiting for one more iteration before running commands"
+                    )
+
+                if continuous_rsync:
+                    transfer_files_from_pod(pod)
+
+            if wait_for_training_start and not training_started:
+                print("Waiting for training to start")
+        else:
+            if terminate_on_error:
+                print("Training status could not be retrieved")
+                terminate_pod(pod_id)
+                exit(1)
+
+            prev_is_training = None
+
+        time.sleep(iter_sec)
+
+
+def get_or_create_pod():
     pods: list[dict] = runpod.get_pods()
     existing_pods = [pod for pod in pods if pod["name"] == pod_name]
 
-    if terminate:
+    if terminate_existing:
         for pod in existing_pods:
-            pod_id = pod["id"]
-            print(f"Terminating pod with id {pod_id}")
-            runpod.terminate_pod(pod_id)
-    elif restart:
+            terminate_pod(pod["id"])
+    elif restart_existing:
         for pod in existing_pods:
-            pod_id = pod["id"]
-            print(f"Restarting pod with id {pod_id}")
-            runpod.stop_pod(pod_id)
-            runpod.resume_pod(pod_id)
+            restart_pod(pod["id"])
 
     if keep_existing and existing_pods:
         pod = existing_pods[0]
@@ -153,7 +334,7 @@ if __name__ == "__main__":
                 ports="6901/http,8000/http,22/tcp",
                 # See also: https://docs.runpod.io/pods/references/environment-variables
                 env={
-                    "VNC_PW": "password",
+                    "VNC_PW": password,
                     "HT_RUNPODCTL_RECEIVE": runpodctl_receive,
                     "HT_CHECKPOINT_URL": checkpoint_url,
                     "HT_RUNPODCTL_UNZIP": "True" if runpodctl_unzip else "False",
@@ -163,15 +344,20 @@ if __name__ == "__main__":
             if str(e).index("No GPU found with the specified ID") >= 0:
                 print([gpu["id"] for gpu in runpod.get_gpus()])
                 raise
+    return pod
 
+
+if __name__ == "__main__":
+    pod = get_or_create_pod()
     pod_id = pod["id"]
-    pod_url = f"https://kasm_user:password@{pod_id}-6901.proxy.runpod.net/"
+    pod_vnc_url = f"https://kasm_user:{password}@{pod_id}-6901.proxy.runpod.net/"
+    pod_training_url = f"https://{pod_id}-8000.proxy.runpod.net/"
 
     print("Started pod 'ht-lora-easy-training-scripts")
     print("Pod list: https://www.runpod.io/console/pods")
     print(f"Pod id: {pod_id}")
     print("Username: kasm_user")
-    print("Password: password")
+    print(f"Password: {password}")
 
     while True:
         try:
@@ -185,7 +371,7 @@ if __name__ == "__main__":
                     if port["privatePort"] == 22
                 ]
 
-            res = requests.get(pod_url)
+            res = requests.get(pod_vnc_url)
             # Wait for both VNC and SSH to be ready
             if res.status_code == 200 and ssh_ports:
                 break
@@ -198,29 +384,16 @@ if __name__ == "__main__":
     ip = ssh_ports[0]["ip"]
     ssh_public_port = ssh_ports[0]["publicPort"]
 
-    print(f"Desktop url: {pod_url}")
+    print(f"Desktop url: {pod_vnc_url}")
     print(f"Public IP: {ip}")
 
     print(
         "\nConnect via ssh using:\n"
         f"{command_prefix}ssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key}"
     )
-    print(
-        "\nTransfer files from local machine to pod using:\n"
-        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port}' -i {ssh_key}' "
-        f"kasm-user@{ip}:/home/ht/training /path/to/local/file"
-    )
-    print(
-        "\nTransfer files from pod to local machine using:\n"
-        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port}' -i {ssh_key}' "
-        "--exclude='LoRA_Easy_Training_Scripts' --include='/*/' --include='/*/**' --exclude='*' "
-        f"kasm-user@{ip}:/home/ht/training /path/to/local/file"
-    )
-    print(
-        "\nTransfer files and terminate pod after training using:\n"
-        "python .\\runpod-wait-for-training.py --wait-for-training-start --continuous-rsync "
-        f"--terminate{' --use-wsl' if use_wsl else ''} --rsync-to /path/to/local/file"
-    )
 
     if rsync_from:
-        transfer_files_from_pod(ssh_public_port, ip)
+        transfer_files_to_pod(ssh_public_port, ip)
+
+    if monitor_training:
+        wait_for_training(pod)
