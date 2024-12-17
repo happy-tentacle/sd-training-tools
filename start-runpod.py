@@ -207,12 +207,12 @@ if __name__ == "__main__":
     )
     print(
         "\nTransfer files from local machine to pod using:\n"
-        f"{command_prefix}rsync -avzP -e ssh -p {ssh_public_port}' -i {ssh_key} "
+        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port}' -i {ssh_key}' "
         f"kasm-user@{ip}:/home/ht/training /path/to/local/file"
     )
     print(
         "\nTransfer files from pod to local machine using:\n"
-        f"{command_prefix}rsync -avzP -e ssh -p {ssh_public_port}' -i {ssh_key} "
+        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port}' -i {ssh_key}' "
         "--exclude='LoRA_Easy_Training_Scripts' --include='/*/' --include='/*/**' --exclude='*' "
         f"kasm-user@{ip}:/home/ht/training /path/to/local/file"
     )

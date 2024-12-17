@@ -10,7 +10,6 @@ Based on the standard `runpod/kasm-docker:cuda11` image and extended to have LoR
 
 All scripts and downloaded files are placed under `/home/ht/training`.
 
-
 ## Connect to virtual desktop
 
 Click "Connect", then "Connect to HTTP Service [Port 6901]"
@@ -44,3 +43,13 @@ Image with LoRA_Easy_Training_Scripts preinstalled:
 ```shell
 docker build -t happytentacle/ht-runpod-lora-easy-training-scripts:preinstalled-0.2 -f Dockerfile-preinstalled .
 ```
+
+## Changelog
+
+### v0.3
+
+- A true SSH daemon is started, which can be authenticated to via the SSH public keys configured in your account settings.
+  - Example SSH command: `ssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key} -o \"StrictHostKeyChecking=no\"`
+  - Example rsync over SSH command: `rsync -avzP -e 'ssh -p {ssh_public_port}' -i {ssh_key} -o \"StrictHostKeyChecking=no\"' --exclude='LoRA_Easy_Training_Scripts' --include='/*/' --include='/*/**' --exclude='*' kasm-user@{ip}:/home/ht/training /path/to/local/file`
+- Added option to download checkpoint from specified url (automatically prompted on startup unless `HT_CHECKPOINT_URL` is set)
+- Terminal window running pod startup script now stays open after the script has completed or failed.
