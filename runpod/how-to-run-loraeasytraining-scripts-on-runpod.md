@@ -1,19 +1,18 @@
 # Running LoRA Easy Training Scripts on runpod.io
 
-## (Recommended) Configure public ssh key
+## Configure public ssh key (recommended)
 
 Configure public ssh key to connect remotely via ssh using `ssh-keygen`
 Set content of `.pub` file into [Settings](https://www.runpod.io/console/user/settings) > SSH Public Keys
 
-## Create Pod
+## Preinstalled template (recommended)
 
-Template: RunPod Desktop
+### Create pod
+
+Template: [ht-lora-easy-training-scripts](https://runpod.io/console/deploy?template=ioyal6hxh1&ref=1hqcphx3)
 Edit template and set the following values
 - Temp storage: 60 GB
 - Volume storage: 0 GB
-
-With RTX 4090, network dim 8, batch size 3, gradient checkpointing enabled: 1.3s/it (30 mins for 1400 steps)
-With RTX 6000 Ada, network dim 8, batch size 3, gradient checkpointing disabled: 1.1s/it (23 mins for 1400 steps)
 
 Click "Connect to HTTP Service [Port 6901]" to open remote desktop session via KasmVNC
 Default username: kasm_user
@@ -21,7 +20,22 @@ Default password: password
 
 NOTE: If the Desktop suddently becomes empty, just refresh the current tab
 
-## Install Lora Easy Training Scripts on RunPod
+## Manual install (for advanced users only)
+
+### Create pod
+
+Template: RunPod Desktop
+Edit template and set the following values
+- Temp storage: 60 GB
+- Volume storage: 0 GB
+
+Click "Connect to HTTP Service [Port 6901]" to open remote desktop session via KasmVNC
+Default username: kasm_user
+Default password: password
+
+NOTE: If the Desktop suddently becomes empty, just refresh the current tab
+
+### Install Lora Easy Training Scripts on RunPod
 
 ```shell
 sudo apt-get update
@@ -45,7 +59,7 @@ python3.11 install.py
 source run.sh
 ```
 
-## Prepare user folder
+### Prepare user folder
 
 In RunPod terminal:
 ```shell
@@ -56,7 +70,9 @@ cd /home/ht/training
 curl -O -L https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL/resolve/main/ponyDiffusionV6XL_v6StartWithThisOne.safetensors
 ```
 
-## Copy files from local to server
+## File transfer from/to pod
+
+### Copy files from local to server
 
 First, [install runpodctl](https://docs.runpod.io/runpodctl/install-runpodctl) locally
 
@@ -76,7 +92,7 @@ In RunPod terminal:
 runpodctl receive <code-from-local-server>
 ```
 
-## Copy files from server to local
+### Copy files from server to local
 
 In RunPod terminal:
 ```shell
@@ -92,11 +108,18 @@ In local terminal:
 runpodctl receive <code-from-runpod>
 ```
 
-## Watching GPU usage
+## Other commands
+
+### Watching GPU usage
 
 ```shell
 watch -n 1 nvidia-smi
 ```
+
+## Performance observations
+
+With RTX 4090, network dim 8, batch size 3, gradient checkpointing enabled: 1.3s/it (30 mins for 1400 steps)
+With RTX 6000 Ada, network dim 8, batch size 3, gradient checkpointing disabled: 1.1s/it (23 mins for 1400 steps)
 
 ## References
 

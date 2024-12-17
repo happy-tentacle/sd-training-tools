@@ -4,7 +4,6 @@ import os
 import argparse
 import time
 import requests
-import webbrowser
 
 parser = argparse.ArgumentParser(
     prog="start-runpod",
@@ -27,6 +26,13 @@ parser.add_argument(
     default="",
 )
 parser.add_argument(
+    "--runpodctl-unzip",
+    dest="runpodctl_unzip",
+    action="store_true",
+    help="If True, will unzip the file received via --runpodctl-receive",
+    default=False,
+)
+parser.add_argument(
     "--checkpoint-url",
     dest="checkpoint_url",
     default="",
@@ -44,6 +50,7 @@ args = parser.parse_args()
 pod_name: str = args.pod_name
 image_name: str = args.image_name
 runpodctl_receive: str = args.runpodctl_receive
+runpodctl_unzip: bool = args.runpodctl_unzip
 checkpoint_url: str = args.checkpoint_url
 terminate: bool = args.terminate
 
@@ -54,10 +61,10 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 if __name__ == "__main__":
     if terminate:
         pods: list[dict] = runpod.get_pods()
-        pod_id_to_terminate = next(pod["id"] for pod in pods if pod["name"] == pod_name)
-        if pod_id_to_terminate:
-            runpod.terminate_pod(pod_id_to_terminate)
-            print(f"Terminated pod with id {pod_id_to_terminate}")
+        pod_ids_to_terminate = [pod["id"] for pod in pods if pod["name"] == pod_name]
+        for pod_id in pod_ids_to_terminate:
+            runpod.terminate_pod(pod_ids_to_terminate[0])
+            print(f"Terminated pod with id {pod_ids_to_terminate[0]}")
 
     pod = runpod.create_pod(
         name=pod_name,
@@ -66,11 +73,14 @@ if __name__ == "__main__":
         volume_in_gb=0,
         container_disk_in_gb=60,
         support_public_ip=True,
-        ports="6901/http",
+        # Port 6901 is for VNC
+        # Port 8000 is for the LoRA_Easy_Training_Scripts backend API
+        ports="6901/http,8000/http",
         env={
             "VNC_PW": "password",
             "HT_RUNPODCTL_RECEIVE": runpodctl_receive,
             "HT_CHECKPOINT_URL": checkpoint_url,
+            "HT_RUNPODCTL_UNZIP": "True" if runpodctl_unzip else "False",
         },
     )
     pod_id = pod["id"]
@@ -93,4 +103,3 @@ if __name__ == "__main__":
         time.sleep(1)
 
     print(f"Desktop url: {pod_url}")
-    webbrowser.open(pod_id)

@@ -7,6 +7,10 @@ cd /home/ht/training
 
 if [ x"${HT_RUNPODCTL_RECEIVE}" != "x" ]; then 
     runpodctl receive "$HT_RUNPODCTL_RECEIVE"
+
+    if [ x"${HT_RUNPODCTL_UNZIP}" == "True" ]; then 
+        unzip *.zip
+    fi
 fi
 
 source "$SCRIPT_DIR/select-checkpoint.sh"
