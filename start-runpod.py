@@ -105,6 +105,8 @@ load_dotenv()
 
 runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
+command_prefix = "wsl " if use_wsl else ""
+
 
 def transfer_files_from_pod(ssh_public_port, ip):
     print("Transfering files local folder to pod")
@@ -112,8 +114,6 @@ def transfer_files_from_pod(ssh_public_port, ip):
     if not ssh_key:
         print("SSH key not specified via --ssh-key, cannot transfer files")
         return
-
-    command_prefix = "wsl " if use_wsl else ""
 
     os.system(
         f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port} -i {ssh_key} -o \"StrictHostKeyChecking=no\"' "
@@ -202,23 +202,24 @@ if __name__ == "__main__":
     print(f"Public IP: {ip}")
 
     print(
-        f"\nConnect via ssh using:\nssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key}"
+        "\nConnect via ssh using:\n"
+        f"{command_prefix}ssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key}"
     )
     print(
         "\nTransfer files from local machine to pod using:\n"
-        f"rsync -avzP -e ssh -p {ssh_public_port}' -i {ssh_key} "
+        f"{command_prefix}rsync -avzP -e ssh -p {ssh_public_port}' -i {ssh_key} "
         f"kasm-user@{ip}:/home/ht/training /path/to/local/file"
     )
     print(
         "\nTransfer files from pod to local machine using:\n"
-        f"rsync -avzP -e ssh -p {ssh_public_port}' -i {ssh_key} "
+        f"{command_prefix}rsync -avzP -e ssh -p {ssh_public_port}' -i {ssh_key} "
         "--exclude='LoRA_Easy_Training_Scripts' --include='/*/' --include='/*/**' --exclude='*' "
         f"kasm-user@{ip}:/home/ht/training /path/to/local/file"
     )
     print(
         "\nTransfer files and terminate pod after training using:\n"
         "python .\\runpod-wait-for-training.py --wait-for-training-start --continuous-rsync "
-        "--terminate --use-wsl --rsync-to /path/to/local/file"
+        f"--terminate{' --use-wsl' if use_wsl else ''} --rsync-to /path/to/local/file"
     )
 
     if rsync_from:
