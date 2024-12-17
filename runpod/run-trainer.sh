@@ -11,8 +11,9 @@ mkdir -p ~/.ssh
 chmod 700 ~/.ssh
 echo "$PUBLIC_KEY" > ~/.ssh/authorized_keys
 chmod 700 ~/.ssh/authorized_keys
-chmod 770 /etc/ssh/sshd_config
+sudo chmod 777 /etc/ssh/sshd_config
 sudo printf "PasswordAuthentication no\nStrictModes no" >> /etc/ssh/sshd_config
+sudo chmod 700 /etc/ssh/sshd_config
 sudo service ssh start
 
 if [ "${HT_RUNPODCTL_RECEIVE}" != "" ]; then 

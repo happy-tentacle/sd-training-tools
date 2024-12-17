@@ -122,7 +122,7 @@ def transfer_files_from_pod(pod):
     # Include all subfolders of /home/ht/training
     # Except for LoRA_Easy_Training_Scripts
     os.system(
-        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port} -i {ssh_key}' "
+        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port} -i {ssh_key} -o \"StrictHostKeyChecking=no\"' "
         "--exclude='LoRA_Easy_Training_Scripts' --include='/*/' --include='/*/**' --exclude='*' "
         f"kasm-user@{ip}:/home/ht/training/ {rsync_to}"
     )

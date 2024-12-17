@@ -21,7 +21,7 @@ parser.add_argument(
 parser.add_argument(
     "--image-name",
     dest="image_name",
-    default="happytentacle/ht-runpod-lora-easy-training-scripts:preinstalled-0.2",
+    default="happytentacle/ht-runpod-lora-easy-training-scripts:preinstalled-0.3",
 )
 parser.add_argument(
     "--gpu",
@@ -50,6 +50,13 @@ parser.add_argument(
     dest="terminate",
     action="store_true",
     help="Terminate existing pod of the same name if present",
+    default=False,
+)
+parser.add_argument(
+    "--restart",
+    dest="restart",
+    action="store_true",
+    help="Restart existing pod of the same name if present",
     default=False,
 )
 parser.add_argument(
@@ -87,6 +94,7 @@ runpodctl_receive: str = args.runpodctl_receive
 runpodctl_unzip: bool = args.runpodctl_unzip
 checkpoint_url: str = args.checkpoint_url
 terminate: bool = args.terminate
+restart: bool = args.restart
 keep_existing: bool = args.keep_existing
 gpu: str = args.gpu
 ssh_key: str = args.ssh_key
@@ -108,7 +116,7 @@ def transfer_files_from_pod(ssh_public_port, ip):
     command_prefix = "wsl " if use_wsl else ""
 
     os.system(
-        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port} -i {ssh_key}' "
+        f"{command_prefix}rsync -avzP -e 'ssh -p {ssh_public_port} -i {ssh_key} -o \"StrictHostKeyChecking=no\"' "
         f"{rsync_from} kasm-user@{ip}:/home/ht/training/"
     )
 
@@ -120,8 +128,14 @@ if __name__ == "__main__":
     if terminate:
         for pod in existing_pods:
             pod_id = pod["id"]
+            print(f"Terminating pod with id {pod_id}")
             runpod.terminate_pod(pod_id)
-            print(f"Terminated pod with id {pod_id}")
+    elif restart:
+        for pod in existing_pods:
+            pod_id = pod["id"]
+            print(f"Restarting pod with id {pod_id}")
+            runpod.stop_pod(pod_id)
+            runpod.resume_pod(pod_id)
 
     if keep_existing and existing_pods:
         pod = existing_pods[0]
