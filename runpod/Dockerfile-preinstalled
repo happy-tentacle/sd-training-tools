@@ -1,12 +1,8 @@
 FROM runpod/kasm-docker:cuda11
 
-COPY ./start-training-ui.sh /dockerstartup/custom_startup.sh
-
 RUN sudo mkdir -p /home/ht/training
 RUN sudo chown -R kasm-user /home/ht/training
 WORKDIR /home/ht/training
-
-RUN curl -O -L https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL/resolve/main/ponyDiffusionV6XL_v6StartWithThisOne.safetensors
 
 RUN sudo apt-get update
 
@@ -28,4 +24,6 @@ WORKDIR /home/ht/training/LoRA_Easy_Training_Scripts
 RUN sh -c '/bin/echo -e "y" | python3.11 install.py'
 
 # Start training UI on pod startup
-COPY ./start-training-ui.sh /dockerstartup/custom_startup.sh
+COPY ./run-trainer.sh /home/ht/training
+COPY ./select-checkpoint.sh /home/ht/training
+COPY ./startup-run-trainer.sh /dockerstartup/custom_startup.sh

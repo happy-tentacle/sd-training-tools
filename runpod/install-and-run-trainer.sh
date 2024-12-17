@@ -2,16 +2,13 @@
 set -e
 
 SECONDS=0
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 echo "Creating training home folder"
 
 sudo mkdir -p /home/ht/training
 sudo chown -R kasm-user /home/ht/training
 cd /home/ht/training
-
-echo "Downloading ponyDiffusionV6XL_v6StartWithThisOne.safetensors"
-
-curl -O -L https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL/resolve/main/ponyDiffusionV6XL_v6StartWithThisOne.safetensors
 
 echo "Installing dependencies"
 
@@ -39,6 +36,4 @@ echo -e "y" | python3.11 install.py
 duration=$SECONDS
 echo "Setup completed in $((duration / 60)) minutes and $((duration % 60)) seconds"
 
-echo "Launching LoRA_Easy_Training_Scripts"
-
-source run.sh
+source "$SCRIPT_DIR/run-trainer.sh"

@@ -1,0 +1,1 @@
+xfce4-terminal -e='bash /home/ht/training/install-and-run-trainer.sh'
