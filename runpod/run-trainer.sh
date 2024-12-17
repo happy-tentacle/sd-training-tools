@@ -5,10 +5,22 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 cd /home/ht/training
 
-if [ x"${HT_RUNPODCTL_RECEIVE}" != "x" ]; then 
+echo "Setting up ssh service"
+
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+echo "$PUBLIC_KEY" > ~/.ssh/authorized_keys
+chmod 700 ~/.ssh/authorized_keys
+chmod 770 /etc/ssh/sshd_config
+sudo printf "PasswordAuthentication no\nStrictModes no" >> /etc/ssh/sshd_config
+sudo service ssh start
+
+if [ "${HT_RUNPODCTL_RECEIVE}" != "" ]; then 
+    echo "Retrieving remote file via runpodctl"
+
     runpodctl receive "$HT_RUNPODCTL_RECEIVE"
 
-    if [ x"${HT_RUNPODCTL_UNZIP}" == "True" ]; then 
+    if [ "${HT_RUNPODCTL_UNZIP}" == "True" ]; then 
         unzip *.zip
     fi
 fi

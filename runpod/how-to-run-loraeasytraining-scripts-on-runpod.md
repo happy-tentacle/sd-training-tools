@@ -117,6 +117,7 @@ watch -n 1 nvidia-smi
 ## Performance observations
 
 With RTX 4090, network dim 8, batch size 3, gradient checkpointing enabled: 1.3s/it (30 mins for 1400 steps)
+
 With RTX 6000 Ada, network dim 8, batch size 3, gradient checkpointing disabled: 1.1s/it (23 mins for 1400 steps)
 
 ## References
