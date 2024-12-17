@@ -1,8 +1,10 @@
 # happy_tentacle's LoRA_Easy_Training_Scripts container
 
-Use on runpod.io: https://runpod.io/console/deploy?template=ioyal6hxh1&ref=1hqcphx3
+Use on runpod.io: https://www.runpod.io/console/explore/ioyal6hxh1
 
 Source on GitHub: https://github.com/happy-tentacle/sd-training-tools/tree/main/runpod
+
+How to install everything manually: [how-to-run-loraeasytraining-scripts-on-runpod](./how-to-run-loraeasytraining-scripts-on-runpod.md)
 
 Based on the standard `runpod/kasm-docker:cuda11` image and extended to have LoRA_Easy_Training_Scripts preinstalled on it, which is launched on pod startup.
 

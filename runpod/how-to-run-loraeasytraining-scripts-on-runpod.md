@@ -9,14 +9,11 @@ Set content of `.pub` file into [Settings](https://www.runpod.io/console/user/se
 
 ### Create pod
 
-Template: [ht-lora-easy-training-scripts](https://runpod.io/console/deploy?template=ioyal6hxh1&ref=1hqcphx3)
-Edit template and set the following values
-- Temp storage: 60 GB
-- Volume storage: 0 GB
+Template: [ht-lora-easy-training-scripts](https://www.runpod.io/console/explore/ioyal6hxh1)
 
 Click "Connect to HTTP Service [Port 6901]" to open remote desktop session via KasmVNC
-Default username: kasm_user
-Default password: password
+- Default username: kasm_user
+- Default password: password
 
 NOTE: If the Desktop suddently becomes empty, just refresh the current tab
 
@@ -24,14 +21,15 @@ NOTE: If the Desktop suddently becomes empty, just refresh the current tab
 
 ### Create pod
 
-Template: RunPod Desktop
+Template: [RunPod Desktop](https://www.runpod.io/console/explore/runpod-desktop)
+
 Edit template and set the following values
 - Temp storage: 60 GB
-- Volume storage: 0 GB
+- Volume storage: 0 GB (not needed, can retrieve pod files via `runpodctl` later)
 
 Click "Connect to HTTP Service [Port 6901]" to open remote desktop session via KasmVNC
-Default username: kasm_user
-Default password: password
+- Default username: kasm_user
+- Default password: password
 
 NOTE: If the Desktop suddently becomes empty, just refresh the current tab
 
