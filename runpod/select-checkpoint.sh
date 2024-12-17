@@ -2,7 +2,7 @@
 
 if [ x"${HT_CHECKPOINT_URL}" == "x" ]; then 
     PS3='Select which checkpoint to download: '
-    options=("ponyDiffusionV6XL" "Illustrious-XL-v0.1" "skip")
+    options=("ponyDiffusionV6XL" "Illustrious-XL-v0.1" "other (specify)" "skip")
     select opt in "${options[@]}"
     do
         case $opt in
@@ -14,6 +14,12 @@ if [ x"${HT_CHECKPOINT_URL}" == "x" ]; then
             "Illustrious-XL-v0.1")
                 echo "Downloading Illustrious-XL-v0.1.safetensors from huggingface"
                 curl -O -L https://huggingface.co/OnomaAIResearch/Illustrious-xl-early-release-v0/resolve/main/Illustrious-XL-v0.1.safetensors
+                break
+                ;;
+            "other (specify)")
+                read -p "What is the checkpoint url? " CHECKPOINT_URL
+                echo "Downloading checkpoint at url $CHECKPOINT_URL"
+                curl -O -L "$CHECKPOINT_URL"
                 break
                 ;;
             "skip")
