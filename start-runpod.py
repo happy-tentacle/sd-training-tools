@@ -4,6 +4,7 @@ import os
 import argparse
 import time
 import requests
+import subprocess
 
 # Example usage
 # python .\start-runpod.py --terminate --checkpoint-url "https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL/resolve/main/ponyDiffusionV6XL_v6StartWithThisOne.safetensors" --use-wsl --rsync-from "/mnt/t/stablediffusion/training/transfer"
@@ -14,6 +15,7 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter
 )
 
+# Remaining letters: "ohjlv"
 parser.add_argument(
     "-n",
     "--pod-name",
@@ -173,6 +175,14 @@ parser.add_argument(
     help="Wait for training to start before terminating pod",
     default=False,
 )
+parser.add_argument(
+    "-b",
+    "--submit-training-files",
+    dest="submit_training_files",
+    action="store_true",
+    help="Submit training files (must be named 'backend_input.json' and placed under /home/ht/training in the pod)",
+    default=False,
+)
 
 args = parser.parse_args()
 
@@ -199,6 +209,7 @@ continuous_rsync: bool = args.continuous_rsync
 wait_for_training_start: bool = args.wait_for_training_start
 wait_for_sec: int = int(args.wait_for_sec)
 iter_sec: int = int(args.iter_sec)
+submit_training_files: bool = args.submit_training_files
 
 load_dotenv()
 
@@ -254,6 +265,8 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
     prev_is_training: bool | None = None
     training_started: bool = False
 
+    training_input_files = get_training_input_files(ssh_public_port, ip) if submit_training_files else []
+
     while True:
         responded = False
         try:
@@ -292,9 +305,13 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
                 if rsync_to:
                     transfer_files_from_pod(ssh_public_port, ip)
 
-                if terminate_after_training:
-                    terminate_pod(pod_id)
-                break
+                if not is_training and len(training_input_files):
+                    training_file = training_input_files.pop()
+                    submit_training_input_file(ssh_public_port, ip, training_file)
+                else:
+                    if terminate_after_training:
+                        terminate_pod(pod_id)
+                    break
             else:
                 prev_is_training = is_training
                 if is_training:
@@ -364,7 +381,56 @@ def get_or_create_pod():
     return pod
 
 
+def get_training_input_files(ssh_public_port: int, ip: str):
+    print("Getting list of input files to submit for training")
+
+    command = list()
+    command.extend([command_prefix] if command_prefix else [])
+    command.extend(["ssh", f"kasm-user@{ip}", "-p", f"{ssh_public_port}", "-i", f"{ssh_key}", "find", "/home/ht/training", "-name", "backend_input.json"])
+    print(" ".join(command))
+
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Failed to get list of backend_input.json files to submit for training, got return code {result.returncode}")
+        exit(1)
+
+    input_files = [line.strip() for line in result.stdout.split()]
+    print(f"Found {len(input_files)} input files to submit for training:\n{input_files}")
+
+    return input_files
+
+
+def submit_training_input_file(ssh_public_port: int, ip: str, file_path: str):
+    print(f"Validating training file {file_path}")
+
+    command = list()
+    command.extend([command_prefix] if command_prefix else [])
+    command.extend(["ssh", f"kasm-user@{ip}", "-p", f"{ssh_public_port}", "-i", f"{ssh_key}", f'curl --fail --no-progress-meter -X POST -H "Content-Type: application/json" --data @{file_path} "http://localhost:8000/validate"'])
+    print(" ".join(command))
+
+    result = subprocess.run(command, check=True)
+    if result.returncode != 0:
+        print(f"Failed to validate training file, got return code {result.returncode}")
+        exit(1)
+
+    print(f"Starting training for file {file_path}")
+
+    command = list()
+    command.extend([command_prefix] if command_prefix else [])
+    command.extend(["ssh", f"kasm-user@{ip}", "-p", f"{ssh_public_port}", "-i", f"{ssh_key}", 'curl --fail --no-progress-meter "http://localhost:8000/train?train_mode=lora&sdxl=True"'])
+    print(" ".join(command))
+
+    result = subprocess.run(command, check=True)
+    if result.returncode != 0:
+        print(f"Failed to start training, got return code {result.returncode}")
+        exit(1)
+
+
 if __name__ == "__main__":
+    if submit_training_files and wait_for_training_start:
+        print("Cannot set both --submit-training-files and --wait-for-training-start")
+        exit(1)
+
     pod = get_or_create_pod()
     pod_id: str = pod["id"]
     pod_vnc_url = f"https://kasm_user:{password}@{pod_id}-6901.proxy.runpod.net/"

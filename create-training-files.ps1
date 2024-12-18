@@ -78,18 +78,21 @@ $Subsets = ($DirRepeats | % {
         $TotalRepeats = [int][Math]::Round([double]$_.FileCountWithRepeats * $TargetFileCount / $RawFileCountWithRepeats / $_.TagFiles.Count)
         
         Write-Host "Directory ""$($Dir.Name)"" FileCount=$($_.TagFiles.Count) Repeat=$TotalRepeats"
+        return @{ Dir = $Dir; RelativeDirPath = $RelativeDirPath; TotalRepeats = $TotalRepeats }
+    })
 
+$SettingsSubsets = @($Subsets | % {
         "[[subsets]]
 caption_extension = "".txt""
-image_dir = ""$((Join-Path $TrainingBasePath $RootDirectoryName ($RelativeDirPath.Trim("."))).Replace("\", "/"))""
+image_dir = ""$((Join-Path $TrainingBasePath $RootDirectoryName ($_.RelativeDirPath.Trim("."))).Replace("\", "/"))""
 keep_tokens = 1
-name = ""$($Dir.Name)""
-num_repeats = $TotalRepeats
+name = ""$($_.Dir.Name)""
+num_repeats = $($_.TotalRepeats)
 shuffle_caption = true"
     }) -Join "`n`n"
 
 $Settings = 
-"$Subsets
+"$SettingsSubsets
 
 [train_mode]
 train_mode = ""lora""
@@ -183,4 +186,103 @@ if ($Overwrite -or !(Test-Path -LiteralPath "$Path\test-prompt.txt")) {
 }
 else {
     Write-Warning """$Path\test-prompt.txt"" already exists and will not be overwritten"
+}
+
+
+$BackendInput = [ordered]@{
+    "args"    = [ordered]@{
+        "general_args"   = [ordered]@{
+            "max_data_loader_n_workers"      = 1
+            "persistent_data_loader_workers" = $True
+            "pretrained_model_name_or_path"  = $ModelPath
+            "sdxl"                           = $True
+            "no_half_vae"                    = $True
+            "mixed_precision"                = "fp16"
+            "gradient_checkpointing"         = $True
+            "gradient_accumulation_steps"    = 1
+            "seed"                           = 0
+            "max_token_length"               = 225
+            "prior_loss_weight"              = 1.0
+            "xformers"                       = $True
+            "max_train_steps"                = $MaxSteps
+            "cache_latents"                  = $True
+        }
+        "network_args"   = [ordered]@{
+            "network_dropout" = 0.1
+            "network_dim"     = 8
+            "network_alpha"   = 8.0
+            "min_timestep"    = 0
+            "max_timestep"    = 1000
+            "network_args"    = [ordered]@{}
+        }
+        "optimizer_args" = [ordered]@{
+            "optimizer_type"     = "Prodigy"
+            "lr_scheduler"       = "cosine"
+            "loss_type"          = "l2"
+            "learning_rate"      = 1.0
+            "warmup_ratio"       = 0.01
+            "unet_lr"            = 1.0
+            "text_encoder_lr"    = 1.0
+            "scale_weight_norms" = 1.0
+            "max_grad_norm"      = 1.0
+            "min_snr_gamma"      = 5
+            "optimizer_args"     = [ordered]@{
+                "d_coef"              = "$DCoef"
+                "weight_decay"        = "$WeightDecay"
+                "decouple"            = "True"
+                "betas"               = "0.9,0.99"
+                "use_bias_correction" = "True"
+                "safeguard_warmup"    = "True"
+            }
+        }
+        "saving_args"    = [ordered]@{
+            "output_dir"               = "$TrainingBasePath/$RootDirectoryName"
+            "output_name"              = $LoraFileName
+            "save_precision"           = "fp16"
+            "save_model_as"            = "safetensors"
+            "save_every_n_epochs"      = 1
+            "save_toml"                = $True
+            "save_last_n_epochs_state" = 1
+            "save_state"               = $True
+        }
+        "sample_args"    = [ordered]@{
+            "sample_sampler"        = "euler_a"
+            "sample_every_n_epochs" = 1
+            "sample_prompts"        = "$TrainingBasePath/$RootDirectoryName/test-prompt.txt"
+        }
+    }
+    "dataset" = [ordered]@{
+        "subsets"      = @(
+            $Subsets | % {
+                [ordered]@{
+                    "caption_extension" = ".txt"
+                    "image_dir"         = "$((Join-Path $TrainingBasePath $RootDirectoryName ($_.RelativeDirPath.Trim("."))).Replace("\", "/"))"
+                    "keep_tokens"       = 1
+                    "name"              = "$($_.Dir.Name)"
+                    "num_repeats"       = $($_.TotalRepeats)
+                    "shuffle_caption"   = $True
+                }
+            }
+        )
+        "general_args" = [ordered]@{
+            "resolution" = @(
+                1024,
+                1024
+            )
+            "batch_size" = $BatchSize
+        }
+        "bucket_args"  = [ordered]@{
+            "enable_bucket"     = $True
+            "min_bucket_reso"   = 256
+            "max_bucket_reso"   = 2048
+            "bucket_reso_steps" = 64
+        }
+    }
+}
+
+if ($Overwrite -or !(Test-Path -LiteralPath "$Path\backend_input.json")) {
+    Set-Content -NoNewline -LiteralPath "$Path\backend_input.json" -Value ($BackendInput | ConvertTo-Json -Depth 4)
+}
+else {
+    Write-Warning """$Path\backend_input.json"" already exists and will not be overwritten"
 }
