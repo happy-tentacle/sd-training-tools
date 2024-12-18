@@ -350,8 +350,8 @@ def get_or_create_pod():
                 # See also: https://docs.runpod.io/pods/references/environment-variables
                 env={
                     "VNC_PW": password,
-                    "HT_RUNPODCTL_RECEIVE": runpodctl_receive,
-                    "HT_CHECKPOINT_URL": checkpoint_url,
+                    "HT_RUNPODCTL_RECEIVE": runpodctl_receive if runpodctl_receive else "",
+                    "HT_CHECKPOINT_URL": checkpoint_url if checkpoint_url else "",
                     "HT_RUNPODCTL_UNZIP": "True" if runpodctl_unzip else "False",
                 },
             )
