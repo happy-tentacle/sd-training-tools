@@ -62,7 +62,7 @@
                 "kimono",
                 "bikini",
                 "bikini top only",
-                "one-piece swimsuit",
+                "swimsuit",
                 "bandeau",
                 "harem outfit",
                 "china dress",
@@ -85,6 +85,7 @@
                 "sweater",
                 "poncho",
                 "shirt",
+                "t-shirt",
                 "cardigan",
                 "coat",
                 "jacket",
@@ -93,8 +94,8 @@
                 "outfit",
                 "sports bra",
                 "cupless bra",
-                "clothes pull",
-                "clothes lift",
+                //"clothes pull",
+                //"clothes lift",
                 //"sarashi",
                 //"cape",
                 //"scarf",
@@ -178,6 +179,7 @@
                 "screaming",
                 "smile",
                 "raised eyebrows",
+                "raised eyebrow",
                 "furrowed brow",
                 "head out of frame", // Face not visible
                 "facing away" // Face not visible
@@ -207,6 +209,7 @@
                 "one eye closed",
                 "jitome",
                 "no eyes",
+                "empty eyes",
                 "covered eyes",
                 "opaque glasses", // Eyes not visible
                 "head out of frame", // Face not visible
@@ -266,6 +269,7 @@
                 "fangs",
                 "skin fang",
                 ":<",
+                "biting own lip",
                 "3:", // Frowning equivalent of :3
                 "tongue out",
                 "faceless", // Face not visible
@@ -321,7 +325,10 @@
         "backless",
         "highleg",
         "string",
-        "off-shoulder"
+        "off-shoulder",
+        "turtleneck",
+        "one-piece",
+        "slingshot"
     ],
     "tagsToKeep": [
         "solo",
@@ -435,8 +442,6 @@
         "assertive female",
         "dark skin", // Need gender
         "dark-skinned female",
-        "hair between eyes",
-        "sidelocks",
         "hetero",
         "animal ears",
         "animal print",
@@ -462,12 +467,18 @@
         "clothing cutout", // Need type of cutout
         "faceless",
         "duel academy uniform \\(yu-gi-oh! gx\\)",
-        "horns",
-        "skin-covered horns",
         "pointy ears",
         "bdsm",
         "femdom",
-        "dashed eyes" // Not recognized by PonyXL
+        "dashed eyes", // Not recognized by PonyXL
+        // "small breasts",
+        // "medium breasts",
+        // "large breasts",
+        "flat chest",
+        "fingernails",
+        "hair between eyes",
+        "sidelocks",
+        "blunt bangs"
     ],
     "redundantTags": {
         "bikini": "swimsuit",

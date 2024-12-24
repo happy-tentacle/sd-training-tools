@@ -31,4 +31,4 @@ source "$SCRIPT_DIR/select-checkpoint.sh"
 echo "Launching LoRA_Easy_Training_Scripts"
 
 cd /home/ht/training/LoRA_Easy_Training_Scripts
-source "./run.sh"
+source "./run.sh" | tee run_out.txt

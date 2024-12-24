@@ -9,12 +9,13 @@ param (
     [Parameter(Mandatory = $false)] [switch] $Normalize,
     [Parameter(Mandatory = $false)] [switch] $Recurse,
     [Parameter(Mandatory = $false)] [switch] $DeleteOriginal,
+    [Parameter(Mandatory = $false)] [switch] $Force,
     [Parameter(Mandatory = $false)] [switch] $DryRun
 )
 
 $ErrorActionPreference = "Stop"
 
-$FileList = Get-ChildItem -File -Recurse:$Recurse -LiteralPath $Path | Where-Object { !$Extension -or !$_.Name.EndsWith($Extension) -and ($_.Name -match "\.(png|jpg|jpeg|bmp|gif|webp)$") }
+$FileList = Get-ChildItem -File -Recurse:$Recurse -LiteralPath $Path | Where-Object { $Force -or !$Extension -or !$_.Name.EndsWith($Extension) -and ($_.Name -match "\.(png|jpg|jpeg|bmp|gif|webp)$") }
 
 if (!$OutputDir) {
     $OutputDir = "$Path\converted"

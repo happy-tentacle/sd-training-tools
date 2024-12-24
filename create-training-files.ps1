@@ -166,6 +166,10 @@ decouple = ""True""
 betas = ""0.9,0.99""
 use_bias_correction = ""True""
 safeguard_warmup = ""True""
+
+[logging_args.args]
+log_with = ""tensorboard""
+logging_dir = ""$TrainingBasePath/$RootDirectoryName""
 "
 
 $TestPrompt = 
@@ -250,6 +254,10 @@ $BackendInput = [ordered]@{
             "sample_every_n_epochs" = 1
             "sample_prompts"        = "$TrainingBasePath/$RootDirectoryName/test-prompt.txt"
         }
+        "logging_args"   = [ordered]@{
+            "logging_dir" = "$TrainingBasePath/$RootDirectoryName"
+            "log_with"    = "tensorboard"
+        }
     }
     "dataset" = [ordered]@{
         "subsets"      = @(
@@ -258,7 +266,7 @@ $BackendInput = [ordered]@{
                     "caption_extension" = ".txt"
                     "image_dir"         = "$((Join-Path $TrainingBasePath $RootDirectoryName ($_.RelativeDirPath.Trim("."))).Replace("\", "/"))"
                     "keep_tokens"       = 1
-                    "name"              = "$($_.Dir.Name)"
+                    "name"              = "$($_.Dir.Name.Replace('_', ''))" # TODO: confirm which characters are allowed
                     "num_repeats"       = $($_.TotalRepeats)
                     "shuffle_caption"   = $True
                 }

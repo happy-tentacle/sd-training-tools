@@ -5,14 +5,21 @@ import argparse
 import time
 import requests
 import subprocess
+import logging
+import sys
+import signal
+import re
+from rich.logging import RichHandler
 
 # Example usage
 # python .\start-runpod.py --terminate --checkpoint-url "https://huggingface.co/LyliaEngine/Pony_Diffusion_V6_XL/resolve/main/ponyDiffusionV6XL_v6StartWithThisOne.safetensors" --use-wsl --rsync-from "/mnt/t/stablediffusion/training/transfer"
 
+logger = logging.getLogger(__name__)
+
 parser = argparse.ArgumentParser(
     prog="start-runpod",
     description="Starts a pod on runpod.io",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
 )
 
 # Remaining letters: "ohjlv"
@@ -217,12 +224,14 @@ runpod.api_key = os.getenv("RUNPOD_API_KEY")
 
 command_prefix = "wsl " if use_wsl else ""
 
+epoch_progress_regex = re.compile("epoch ([0-9]+)/([0-9]+)")
+
 
 def transfer_files_to_pod(ssh_public_port: int, ip: str):
-    print("Transfering files local folder to pod")
+    logger.info("Transfering files local folder to pod")
 
     if not ssh_key:
-        print("SSH key not specified via --ssh-key, cannot transfer files")
+        logger.info("SSH key not specified via --ssh-key, cannot transfer files")
         return
 
     os.system(
@@ -232,10 +241,10 @@ def transfer_files_to_pod(ssh_public_port: int, ip: str):
 
 
 def transfer_files_from_pod(ssh_public_port: int, ip: str):
-    print("Transfering files from pod to local folder")
+    logger.info("Transfering files from pod to local folder")
 
     if not ssh_key:
-        print("SSH key not specified via --ssh-key, cannot transfer files")
+        logger.error("SSH key not specified via --ssh-key, cannot transfer files")
         return
 
     # Include all subfolders of /home/ht/training
@@ -248,12 +257,12 @@ def transfer_files_from_pod(ssh_public_port: int, ip: str):
 
 
 def terminate_pod(pod_id: str):
-    print(f"Terminating pod with id {pod_id}")
+    logger.warning(f"Terminating pod with id {pod_id}")
     runpod.terminate_pod(pod_id)
 
 
 def restart_pod(pod_id: str):
-    print(f"Restarting pod with id {pod_id}")
+    logger.warning(f"Restarting pod with id {pod_id}")
     runpod.stop_pod(pod_id)
     runpod.resume_pod(pod_id)
 
@@ -265,7 +274,15 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
     prev_is_training: bool | None = None
     training_started: bool = False
 
-    training_input_files = get_training_input_files(ssh_public_port, ip) if submit_training_files else []
+    training_input_files = (
+        get_training_input_files(ssh_public_port, ip) if submit_training_files else []
+    )
+
+    if submit_training_files and not training_input_files and terminate_after_training:
+        logger.error("Found no training files, aborting")
+        if terminate_on_error:
+            terminate_pod(pod_id)
+        exit(1)
 
     while True:
         responded = False
@@ -279,12 +296,12 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
                 if is_training:
                     training_started = True
             else:
-                print(
+                logger.warning(
                     f"Error retrieving training status, got status code {res.status_code}"
                 )
 
         except requests.exceptions.RequestException as e:
-            print(f"Error retrieving training status: {e}")
+            logger.warning(f"Error retrieving training status: {e}")
 
         if responded or immediate:
             # Make sure traning status is false for two consecutive calls
@@ -297,10 +314,12 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
                 and (not wait_for_training_start or training_started)
             ):
                 if wait_for_sec:
-                    print(f"Waiting for {wait_for_sec} seconds before running commands")
+                    logger.info(
+                        f"Waiting for {wait_for_sec} seconds before running commands"
+                    )
                     time.sleep(wait_for_sec)
 
-                print("Training stopped")
+                logger.info("Training stopped")
 
                 if rsync_to:
                     transfer_files_from_pod(ssh_public_port, ip)
@@ -315,9 +334,9 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
             else:
                 prev_is_training = is_training
                 if is_training:
-                    print("Training in progress")
+                    print_training_progress(ssh_public_port, ip)
                 elif not wait_for_training_start or training_started:
-                    print(
+                    logger.info(
                         "Training stopped, waiting for one more iteration before running commands"
                     )
 
@@ -325,10 +344,10 @@ def wait_for_training(pod: dict, ssh_public_port: int, ip: str):
                     transfer_files_from_pod(ssh_public_port, ip)
 
             if wait_for_training_start and not training_started:
-                print("Waiting for training to start")
+                logger.info("Waiting for training to start")
         else:
             if terminate_on_error:
-                print("Training status could not be retrieved")
+                logger.error("Training status could not be retrieved")
                 terminate_pod(pod_id)
                 exit(1)
 
@@ -351,7 +370,7 @@ def get_or_create_pod():
     if keep_existing and existing_pods:
         pod = existing_pods[0]
         pod_id = pod["id"]
-        print(f"Reusing pod with id {pod_id}")
+        logger.info(f"Reusing pod with id {pod_id}")
     else:
         try:
             pod = runpod.create_pod(
@@ -367,68 +386,161 @@ def get_or_create_pod():
                 # See also: https://docs.runpod.io/pods/references/environment-variables
                 env={
                     "VNC_PW": password,
-                    "HT_RUNPODCTL_RECEIVE": runpodctl_receive if runpodctl_receive else "",
+                    "HT_RUNPODCTL_RECEIVE": (
+                        runpodctl_receive if runpodctl_receive else ""
+                    ),
                     "HT_CHECKPOINT_URL": checkpoint_url if checkpoint_url else "",
                     "HT_RUNPODCTL_UNZIP": "True" if runpodctl_unzip else "False",
                 },
             )
             pod_id = pod["id"]
-            print(f"Created pod with id {pod_id}")
+            logger.info(f"Created pod with id {pod_id}")
         except Exception as e:
             if str(e).index("No GPU found with the specified ID") >= 0:
-                print([gpu["id"] for gpu in runpod.get_gpus()])
+                logger.info([gpu["id"] for gpu in runpod.get_gpus()])
                 raise
     return pod
 
 
 def get_training_input_files(ssh_public_port: int, ip: str):
-    print("Getting list of input files to submit for training")
+    logger.info("Getting list of input files to submit for training")
 
     command = list()
     command.extend([command_prefix] if command_prefix else [])
-    command.extend(["ssh", f"kasm-user@{ip}", "-p", f"{ssh_public_port}", "-i", f"{ssh_key}", "find", "/home/ht/training", "-name", "backend_input.json"])
-    print(" ".join(command))
+    command.extend(
+        [
+            "ssh",
+            f"kasm-user@{ip}",
+            "-p",
+            f"{ssh_public_port}",
+            "-i",
+            f"{ssh_key}",
+            "find",
+            "/home/ht/training",
+            "-name",
+            "backend_input.json",
+        ]
+    )
+    logger.info(" ".join(command))
 
     result = subprocess.run(command, check=True, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"Failed to get list of backend_input.json files to submit for training, got return code {result.returncode}")
+        logger.error(
+            "Failed to get list of backend_input.json files to submit for training, "
+            f"got return code {result.returncode}"
+        )
         exit(1)
 
     input_files = [line.strip() for line in result.stdout.split()]
-    print(f"Found {len(input_files)} input files to submit for training:\n{input_files}")
+    logger.info(
+        f"Found {len(input_files)} input files to submit for training:\n{input_files}"
+    )
+
+    if not input_files:
+        logger.error("No training files found")
 
     return input_files
 
 
 def submit_training_input_file(ssh_public_port: int, ip: str, file_path: str):
-    print(f"Validating training file {file_path}")
+    logger.info(f"Validating training file {file_path}")
 
     command = list()
     command.extend([command_prefix] if command_prefix else [])
-    command.extend(["ssh", f"kasm-user@{ip}", "-p", f"{ssh_public_port}", "-i", f"{ssh_key}", f'curl --fail --no-progress-meter -X POST -H "Content-Type: application/json" --data @{file_path} "http://localhost:8000/validate"'])
-    print(" ".join(command))
+    command.extend(
+        [
+            "ssh",
+            f"kasm-user@{ip}",
+            "-p",
+            f"{ssh_public_port}",
+            "-i",
+            f"{ssh_key}",
+            f"jq '.args.general_args.gradient_checkpointing=\"false\"' {file_path} | "
+            # f"cat {file_path} | "
+            'curl --fail --no-progress-meter -X POST -H "Content-Type: application/json" '
+            '--data @- "http://localhost:8000/validate"',
+        ]
+    )
+    logger.info(" ".join(command))
 
     result = subprocess.run(command, check=True)
     if result.returncode != 0:
-        print(f"Failed to validate training file, got return code {result.returncode}")
+        logger.error(
+            f"Failed to validate training file, got return code {result.returncode}"
+        )
         exit(1)
 
-    print(f"Starting training for file {file_path}")
+    logger.info(f"Starting training for file {file_path}")
 
     command = list()
     command.extend([command_prefix] if command_prefix else [])
-    command.extend(["ssh", f"kasm-user@{ip}", "-p", f"{ssh_public_port}", "-i", f"{ssh_key}", 'curl --fail --no-progress-meter "http://localhost:8000/train?train_mode=lora&sdxl=True"'])
-    print(" ".join(command))
+    command.extend(
+        [
+            "ssh",
+            f"kasm-user@{ip}",
+            "-p",
+            f"{ssh_public_port}",
+            "-i",
+            f"{ssh_key}",
+            'curl --fail --no-progress-meter "http://localhost:8000/train?train_mode=lora&sdxl=True"',
+        ]
+    )
+    logger.info(" ".join(command))
 
     result = subprocess.run(command, check=True)
     if result.returncode != 0:
-        print(f"Failed to start training, got return code {result.returncode}")
+        logger.error(f"Failed to start training, got return code {result.returncode}")
         exit(1)
+
+
+def print_training_progress(ssh_public_port: int, ip: str):
+    command = list()
+    command.extend([command_prefix] if command_prefix else [])
+    command.extend(
+        [
+            "ssh",
+            f"kasm-user@{ip}",
+            "-p",
+            f"{ssh_public_port}",
+            "-i",
+            f"{ssh_key}",
+            'tac /home/ht/training/LoRA_Easy_Training_Scripts/run_out.txt | grep -E -m1 "epoch ([0-9]+)/([0-9]+)"',
+        ]
+    )
+    logger.info(" ".join(command))
+
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.warning(
+            f"Training still ongoing but failed to retrieve progress, got return code {result.returncode}"
+        )
+        return
+
+    match = epoch_progress_regex.search(result.stdout)
+    if not match:
+        logger.warning("Failed to parse training progress")
+        return
+
+    epoch_current = match.group(1)
+    epoch_total = match.group(2)
+    logger.info(f"Training at epoch {epoch_current}/{epoch_total}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[RichHandler()],
+        force=True,
+    )
+
+    signal.signal(signal.SIGINT, lambda sig, frame: sys.exit(1))
+
     if submit_training_files and wait_for_training_start:
-        print("Cannot set both --submit-training-files and --wait-for-training-start")
+        logger.error(
+            "Cannot set both --submit-training-files and --wait-for-training-start"
+        )
         exit(1)
 
     pod = get_or_create_pod()
@@ -436,10 +548,10 @@ if __name__ == "__main__":
     pod_vnc_url = f"https://kasm_user:{password}@{pod_id}-6901.proxy.runpod.net/"
     pod_training_url = f"https://{pod_id}-8000.proxy.runpod.net/"
 
-    print("Pod list: https://www.runpod.io/console/pods")
-    print(f"Pod id: {pod_id}")
-    print("Username: kasm_user")
-    print(f"Password: {password}")
+    logger.info("Pod list: https://www.runpod.io/console/pods")
+    logger.info(f"Pod id: {pod_id}")
+    logger.info("Username: kasm_user")
+    logger.info(f"Password: {password}")
 
     while True:
         try:
@@ -457,21 +569,33 @@ if __name__ == "__main__":
             # Wait for both VNC and SSH to be ready
             if res.status_code == 200 and ssh_ports:
                 break
-            print("Pod is not ready yet, waiting 5 seconds")
+            logger.info("Pod is not ready yet, waiting 5 seconds")
         except requests.exceptions.RequestException:
-            print("Pod is not ready yet, waiting 5 seconds")
+            logger.info("Pod is not ready yet, waiting 5 seconds")
 
         time.sleep(5)
 
     ip: str = ssh_ports[0]["ip"]
     ssh_public_port: int = ssh_ports[0]["publicPort"]
 
-    print(f"Desktop url: {pod_vnc_url}")
-    print(f"Public IP: {ip}")
+    logger.info(f"Desktop url: {pod_vnc_url}")
+    logger.info(f"Public IP: {ip}")
 
-    print(
-        "\nConnect via ssh using:\n"
+    logger.info(
+        "\nTo connect via SSH: "
         f"{command_prefix}ssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key}"
+    )
+
+    logger.info(
+        "\nTo watch GPU usage: "
+        f"{command_prefix}ssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key} "
+        "-t 'watch -n 1 nvidia-smi'"
+    )
+
+    logger.info(
+        "\nTo stop training: "
+        f"{command_prefix}ssh kasm-user@{ip} -p {ssh_public_port} -i {ssh_key} "
+        "-t 'curl http://localhost:8000/stop_training'"
     )
 
     if rsync_from:

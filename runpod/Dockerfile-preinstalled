@@ -27,6 +27,7 @@ RUN sh -c '/bin/echo -e "y" | python3.11 install.py'
 RUN sudo apt-get -y install inotify-tools
 RUN sudo apt-get -y install rsync
 RUN sudo apt-get -y install openssh-server
+RUN sudo apt-get -y install jq
 
 # Start training UI on pod startup
 COPY ./run-trainer.sh /home/ht/training

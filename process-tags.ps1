@@ -571,7 +571,7 @@ if ($LogStats) {
     $TagsTooBroad = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::InvariantCultureIgnoreCase)
     $TagsTooBroad.UnionWith([string[]]@(`
                 $CountByTags.Keys | `
-                Where-Object { $Tag = $_; !$TagsAdded.Contains($Tag) -and !$FileTagsKept.Contains($Tag) -and $TagsWithoutColor.Contains($Tag) }
+                Where-Object { $Tag = $_; !$TagsAdded.Contains($Tag) -and !$FileTagsKept.Contains($Tag) -and $TagsWithoutColor.Contains($Tag) -and !$AllTags.Contains("monochrome") -and !$AllTags.Contains("greyscale") }
         ))
     
     # Suggest removing tags part of unwanted tag list
